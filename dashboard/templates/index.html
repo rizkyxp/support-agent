@@ -309,7 +309,7 @@
                             <label class="block text-sm font-medium text-gray-400 mb-2">Execution Mode</label>
                             <div class="flex items-center justify-between bg-gray-900 rounded-lg p-3 border border-gray-700 hover:border-gray-500 transition-colors">
                                 <span class="text-white text-sm"><i class="fa-solid fa-arrows-spin text-primary-500 mr-2"></i>Interval (Seconds)</span>
-                                <input type="number" id="run-interval" value="0" class="w-20 bg-gray-800 text-white text-sm text-center font-bold px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-primary-500">
+                                <input type="number" id="run-interval" value="300" class="w-20 bg-gray-800 text-white text-sm text-center font-bold px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-primary-500">
                             </div>
                             <p class="text-xs text-gray-500 mt-2">Set to 0 for a Single Run.</p>
                         </div>
@@ -319,17 +319,17 @@
                             <div class="space-y-3">
                                 <label class="flex items-center cursor-pointer group">
                                     <div class="relative">
-                                        <input type="checkbox" id="chk-pr" class="sr-only" checked>
-                                        <div class="block bg-gray-800 w-10 h-6 border border-gray-600 rounded-full transition group-hover:border-primary-500"></div>
-                                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4 bg-primary-500"></div>
+                                        <input type="checkbox" id="chk-pr" class="sr-only peer" checked>
+                                        <div class="block bg-gray-800 w-10 h-6 border border-gray-600 rounded-full transition-colors group-hover:border-primary-500 peer-checked:bg-primary-500/20 peer-checked:border-primary-500"></div>
+                                        <div class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition-transform duration-200 peer-checked:translate-x-4 peer-checked:bg-primary-500"></div>
                                     </div>
                                     <div class="ml-3 text-sm font-medium text-white">Process Pull Requests</div>
                                 </label>
                                 <label class="flex items-center cursor-pointer group">
                                     <div class="relative">
-                                        <input type="checkbox" id="chk-issue" class="sr-only" checked>
-                                        <div class="block bg-gray-800 w-10 h-6 border border-gray-600 rounded-full transition group-hover:border-primary-500"></div>
-                                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4 bg-primary-500"></div>
+                                        <input type="checkbox" id="chk-issue" class="sr-only peer" checked>
+                                        <div class="block bg-gray-800 w-10 h-6 border border-gray-600 rounded-full transition-colors group-hover:border-primary-500 peer-checked:bg-primary-500/20 peer-checked:border-primary-500"></div>
+                                        <div class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition-transform duration-200 peer-checked:translate-x-4 peer-checked:bg-primary-500"></div>
                                     </div>
                                     <div class="ml-3 text-sm font-medium text-white">Process Issues</div>
                                 </label>
@@ -364,15 +364,6 @@
                 </div>
 
                 <style>
-                    /* Toggle Checkbox Styles */
-                    input:checked ~ .dot {
-                        transform: translateX(100%);
-                        background-color: #3b82f6;
-                    }
-                    input:checked ~ .block {
-                        background-color: rgba(59, 130, 246, 0.2);
-                        border-color: #3b82f6;
-                    }
                     /* Terminal custom styling */
                     .xterm-viewport {
                         border-radius: 0 0 0.75rem 0.75rem;
@@ -481,6 +472,7 @@
                             if(data.status === 'success') {
                                 document.getElementById('btn-run').classList.add('hidden');
                                 document.getElementById('btn-stop').classList.remove('hidden');
+                                toggleInputs(true);
                                 term.clear();
                             } else {
                                 alert("Error: " + data.message);
@@ -498,6 +490,7 @@
                             if(data.status === 'success') {
                                 document.getElementById('btn-stop').classList.add('hidden');
                                 document.getElementById('btn-run').classList.remove('hidden');
+                                toggleInputs(false);
                             }
                         } catch (e) {
                             alert("Failed to stop runner: " + e);
@@ -512,9 +505,30 @@
                             if(data.is_running) {
                                 document.getElementById('btn-run').classList.add('hidden');
                                 document.getElementById('btn-stop').classList.remove('hidden');
+                                toggleInputs(true);
                             }
                         } catch (e) {}
                     }
+                    
+                    function toggleInputs(disabled) {
+                        const inputs = ['run-interval', 'chk-pr', 'chk-issue', 'log-level'];
+                        inputs.forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) {
+                                el.disabled = disabled;
+                                // Add visual feedback for disabled state
+                                const wrapper = el.closest('.flex') || el.closest('.relative') || el;
+                                if (disabled) {
+                                    wrapper.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                                    if(el.type === 'checkbox') wrapper.closest('label').classList.add('cursor-not-allowed');
+                                } else {
+                                    wrapper.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                                    if(el.type === 'checkbox') wrapper.closest('label').classList.remove('cursor-not-allowed');
+                                }
+                            }
+                        });
+                    }
+                    
                     document.addEventListener('DOMContentLoaded', checkRunnerStatus);
                 </script>
 
