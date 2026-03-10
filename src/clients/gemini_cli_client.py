@@ -27,7 +27,7 @@ class GeminiCLIClient:
         
         Args:
             cli_path: Path to gemini CLI executable (default: "gemini" in PATH)
-            model: Model to use (default: auto-detect from CLI or gemini-2.0-flash-exp)
+            model: Model to use (default: auto-detect from CLI or gemini-3-flash)
             max_retries: Maximum number of retries on failure (default: 3)
         """
         self.cli_path = cli_path
@@ -289,10 +289,11 @@ Remember: Return ONLY the JSON object."""
         """Use Gemini CLI to fix code based on review comments and push changes.
         
         Gemini CLI will:
-        1. Read and analyze review comments
+        1. Read and analyze review comments from feedback.md
         2. Fix the code issues
         3. Create appropriate commit message
         4. Commit and push changes
+        5. The feedback.md file will be removed after.
         
         Args:
             repo_path: Path to local repository
@@ -302,20 +303,24 @@ Remember: Return ONLY the JSON object."""
         Returns:
             dict: Result with 'success' boolean and 'message' string
         """
+        feedback_file = repo_path / "feedback.md"
         try:
             logger.info(f"Using Gemini CLI to fix and push changes to {branch_name}")
             
+            # Write review comments to a feedback file
+            feedback_file.write_text(review_comments, encoding='utf-8')
+            logger.debug(f"Wrote review comments to {feedback_file}")
+            
             # Construct prompt for Gemini CLI
-            prompt = f"""You are a developer working on a Pull Request. You received the following review comments:
-
-{review_comments}
-
-Please:
-1. Read the relevant files in the repository
-2. Fix all issues mentioned in the review comments
-3. Create an appropriate commit message based on what you fixed
-4. Commit the changes
-5. Push to branch: {branch_name}
+            prompt = f"""You are a developer working on a Pull Request. You have received review comments.
+To fix the issues, please:
+1. Read the review comments from `feedback.md` in the root directory.
+2. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
+3. Read the other relevant files in the repository to understand the context.
+4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
+5. Create an appropriate commit message based on what you fixed.
+6. Commit the changes.
+7. Push to branch: {branch_name}
 
 Proceed with fixing the issues, committing, and pushing."""
             
@@ -367,6 +372,14 @@ Proceed with fixing the issues, committing, and pushing."""
                 'success': False,
                 'message': f"Error: {e}"
             }
+        finally:
+            # Clean up the feedback file regardless of success or failure
+            try:
+                if feedback_file.exists():
+                    feedback_file.unlink()
+                    logger.debug(f"Cleaned up {feedback_file}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up {feedback_file}: {e}")
 
     def solve_issue_and_push(
         self,
@@ -407,11 +420,12 @@ Description:
 {issue_body}
 
 Please:
-1. Read the relevant files in the repository to understand the codebase
-2. Implement the fix or feature described in the issue
-3. Create an appropriate commit message that references issue #{issue_number}
-4. Commit the changes
-5. Push to branch: {branch_name}
+1. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
+2. Read the relevant files in the repository to understand the codebase.
+3. Implement the fix or feature described in the issue, ensuring your code adheres to the project standards found in step 1.
+4. Create an appropriate commit message that references issue #{issue_number}
+5. Commit the changes
+6. Push to branch: {branch_name}
 
 Proceed with implementing the solution, committing, and pushing."""
             

@@ -144,7 +144,7 @@ class GitHubClient:
             raise GitHubAPIError(f"Failed to fetch PRs with changes requested: {e}")
     
     def get_review_comments(self, pr_number: int) -> list[ReviewComment]:
-        """Get review comments for a PR.
+        """Get all review comments for a PR.
         
         Args:
             pr_number: Pull request number
@@ -153,24 +153,26 @@ class GitHubClient:
             list[ReviewComment]: Comments with body, file, line info
         """
         try:
-            logger.info(f"Fetching review comments for PR #{pr_number}")
+            logger.info(f"Fetching all review comments for PR #{pr_number}")
             
             gh_pr = self.repo.get_pull(pr_number)
-            reviews = gh_pr.get_reviews()
             
             comments = []
+            
+            # 1. Get top-level review bodies from ALL reviews
+            reviews = gh_pr.get_reviews()
             for review in reviews:
-                if review.state == "CHANGES_REQUESTED":
+                if review.body and review.body.strip():
                     comment = ReviewComment(
-                        body=review.body or "",
-                        file_path=None,  # Review comments don't have file path
+                        body=review.body,
+                        file_path=None,
                         line=None,
                         reviewer=review.user.login,
                         created_at=review.submitted_at or datetime.now()
                     )
                     comments.append(comment)
             
-            # Also get review comments (line-specific comments)
+            # 2. Get review comments (inline code-specific comments)
             review_comments = gh_pr.get_review_comments()
             for rc in review_comments:
                 comment = ReviewComment(
@@ -181,8 +183,21 @@ class GitHubClient:
                     created_at=rc.created_at
                 )
                 comments.append(comment)
+                
+            # 3. Get general PR conversation comments (Issue comments)
+            issue_comments = gh_pr.get_issue_comments()
+            for ic in issue_comments:
+                if ic.body and ic.body.strip():
+                    comment = ReviewComment(
+                        body=ic.body,
+                        file_path=None,
+                        line=None,
+                        reviewer=ic.user.login,
+                        created_at=ic.created_at
+                    )
+                    comments.append(comment)
             
-            logger.info(f"Found {len(comments)} review comments for PR #{pr_number}")
+            logger.info(f"Found {len(comments)} total review comments for PR #{pr_number}")
             return comments
             
         except GithubException as e:

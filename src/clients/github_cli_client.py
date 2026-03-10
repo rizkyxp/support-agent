@@ -464,11 +464,12 @@ class GitHubCLIClient:
         return self.get_pr_review_comments(pr_number)
     
     def get_pr_review_comments(self, pr_number: int) -> List[Dict]:
-        """Get review comments for a PR.
+        """Get all review comments for a PR.
         
-        Fetches both:
-        1. Top-level review body (from reviews with CHANGES_REQUESTED state)
+        Fetches:
+        1. Top-level review bodies (from all reviews)
         2. Inline code review comments (file-specific, line-specific)
+        3. General PR conversation comments
         
         Args:
             pr_number: PR number
@@ -486,13 +487,13 @@ class GitHubCLIClient:
         
         all_comments = []
         
-        # 1. Get top-level review body from reviews with CHANGES_REQUESTED
+        # 1. Get top-level review bodies from ALL reviews
         try:
             cmd = [
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
                 "--json", "reviews",
-                "--jq", '.reviews[] | select(.state == "CHANGES_REQUESTED") | {body: .body, author: .author.login, submittedAt: .submittedAt}'
+                "--jq", '.reviews[] | {body: .body, author: .author.login, submittedAt: .submittedAt, state: .state}'
             ]
             
             result = subprocess.run(
@@ -507,7 +508,7 @@ class GitHubCLIClient:
                     if line:
                         try:
                             review = json.loads(line)
-                            # Only include if body is not empty
+                            # Only include if body is not empty and not just common state changes without messages
                             if review.get('body', '').strip():
                                 all_comments.append(review)
                         except json.JSONDecodeError:
@@ -549,6 +550,36 @@ class GitHubCLIClient:
                 logger.warning(f"Failed to get inline review comments: {result.stderr}")
         except Exception as e:
             logger.warning(f"Error getting inline review comments: {e}")
+
+        # 3. Get general PR conversation comments (Issue comments)
+        try:
+            cmd = [
+                self.cli_path, "pr", "view", str(pr_number),
+                "--repo", self.current_repo,
+                "--json", "comments",
+                "--jq", '.comments[] | {body: .body, author: .author.login, submittedAt: .createdAt}'
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                for line in result.stdout.strip().split('\n'):
+                    if line:
+                        try:
+                            comment = json.loads(line)
+                            if comment.get('body', '').strip():
+                                all_comments.append(comment)
+                        except json.JSONDecodeError:
+                            continue
+            else:
+                logger.warning(f"Failed to get PR general comments: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error getting PR general comments: {e}")
         
         logger.debug(f"Found {len(all_comments)} total review comments for PR #{pr_number}")
         return all_comments
