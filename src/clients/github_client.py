@@ -142,6 +142,38 @@ class GitHubClient:
             
         except GithubException as e:
             raise GitHubAPIError(f"Failed to fetch PRs with changes requested: {e}")
+            
+    def get_latest_changes_requested_time(self, pr_number: int) -> Optional[datetime]:
+        """Get the timestamp of the latest review with CHANGES_REQUESTED state.
+        
+        Args:
+            pr_number: Pull request number
+            
+        Returns:
+            datetime: Timestamp of the latest CHANGES_REQUESTED review, or None if not found
+        """
+        try:
+            logger.info(f"Fetching latest CHANGES_REQUESTED review for PR #{pr_number}")
+            gh_pr = self.repo.get_pull(pr_number)
+            reviews = gh_pr.get_reviews()
+            
+            latest_time = None
+            for review in reviews:
+                if review.state == "CHANGES_REQUESTED":
+                    # reviews are generally ordered by creation time, but let's be safe
+                    if latest_time is None or review.submitted_at > latest_time:
+                        latest_time = review.submitted_at
+            
+            if latest_time:
+                logger.info(f"Latest CHANGES_REQUESTED for PR #{pr_number} was at {latest_time}")
+            else:
+                logger.info(f"No CHANGES_REQUESTED review found for PR #{pr_number}")
+                
+            return latest_time
+            
+        except Exception as e:
+            logger.warning(f"Failed to fetch latest CHANGES_REQUESTED time for PR #{pr_number}: {e}")
+            return None
     
     def get_review_comments(self, pr_number: int) -> list[ReviewComment]:
         """Get all review comments for a PR.

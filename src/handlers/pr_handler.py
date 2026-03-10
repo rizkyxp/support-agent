@@ -159,29 +159,26 @@ class PRHandler:
             self.git_manager.checkout_and_pull(pr.head_branch)
             
             # Step 2: Get last review request timestamp for this PR
-            last_request_time = self._get_last_review_request_time(pr.number)
+            # Try GitHub first for more accurate sync
+            last_request_time = self.github_client.get_latest_changes_requested_time(pr.number)
+            
+            # Fallback to local file if GitHub doesn't have it (or as a safety check)
+            if not last_request_time:
+                last_request_time = self._get_last_review_request_time(pr.number)
+                
             if last_request_time:
-                logger.info(f"Last review request was at: {last_request_time}")
+                logger.info(f"Filtering comments created after: {last_request_time}")
             else:
-                logger.info("No previous review request found, processing all comments")
+                logger.info("No previous review timestamp found, processing all comments")
             
             # Step 3: Get review comments
             logger.info("Fetching review comments")
-            comments_data = self.github_client.get_review_comments(pr.number)
+            comments_all = self.github_client.get_review_comments(pr.number)
             
-            # Convert dict to ReviewComment objects and filter by timestamp
+            # Filter comments by timestamp
             comments = []
-            for comment_dict in comments_data:
+            for comment in comments_all:
                 try:
-                    comment = ReviewComment(
-                        body=comment_dict.get('body', ''),
-                        file_path=comment_dict.get('file_path'),
-                        line=comment_dict.get('line'),
-                        reviewer=comment_dict.get('author', 'unknown'),
-                        created_at=datetime.fromisoformat(comment_dict.get('submittedAt', '').replace('Z', '+00:00')) if comment_dict.get('submittedAt') else datetime.now(),
-                        diff_hunk=comment_dict.get('diff_hunk')
-                    )
-                    
                     # Filter: only include comments after last review request
                     if last_request_time is None or comment.created_at > last_request_time:
                         comments.append(comment)
@@ -189,7 +186,7 @@ class PRHandler:
                         logger.debug(f"Skipping old comment from {comment.reviewer} (created at {comment.created_at})")
                         
                 except Exception as e:
-                    logger.warning(f"Failed to parse review comment: {e}")
+                    logger.warning(f"Failed to process review comment: {e}")
                     continue
             
             if not comments:
