@@ -45,6 +45,24 @@ class Configuration:
             load_dotenv(env_file)
         else:
             load_dotenv()
+            
+        # Optional: Load override from SQLite Dashboard DB
+        db_path = Path.cwd() / ".agent_data" / "dashboard.sqlite"
+        if db_path.exists():
+            try:
+                import sqlite3
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                # Check if table exists
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='global_config'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT key, value FROM global_config")
+                    for row in cursor.fetchall():
+                        os.environ[row[0]] = row[1]
+                conn.close()
+            except Exception as e:
+                print(f"Warning: Failed to load config from dashboard db: {e}")
+
         
         # Load required fields
         gemini_api_key = os.getenv("GEMINI_API_KEY")

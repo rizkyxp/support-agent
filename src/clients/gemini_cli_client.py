@@ -280,29 +280,38 @@ Remember: Return ONLY the JSON object."""
         
         return None
 
+    def _get_prompt_template(self, template_id: str, default_template: str, **kwargs) -> str:
+        """Fetch prompt template from database (if available) and format it, else use default."""
+        try:
+            import sqlite3
+            db_path = Path.cwd() / ".agent_data" / "dashboard.sqlite"
+            if db_path.exists():
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_templates'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT template_text FROM prompt_templates WHERE id=?", (template_id,))
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        return row[0].format(**kwargs)
+                conn.close()
+        except Exception as e:
+            logger.warning(f"Could not load custom prompt template for {template_id}, using default: {e}")
+        
+        # Fallback to default
+        try:
+            return default_template.format(**kwargs)
+        except KeyError as e:
+            logger.error(f"Missing formatting key in prompt template: {e}")
+            return default_template
+
     def fix_and_push(
         self,
         repo_path: Path,
         branch_name: str,
         review_comments: str
     ) -> dict:
-        """Use Gemini CLI to fix code based on review comments and push changes.
-        
-        Gemini CLI will:
-        1. Read and analyze review comments from feedback.md
-        2. Fix the code issues
-        3. Create appropriate commit message
-        4. Commit and push changes
-        5. The feedback.md file will be removed after.
-        
-        Args:
-            repo_path: Path to local repository
-            branch_name: Branch name to push to
-            review_comments: Review comments to address
-            
-        Returns:
-            dict: Result with 'success' boolean and 'message' string
-        """
+        """Use Gemini CLI to fix code based on review comments and push changes."""
         feedback_file = repo_path / "feedback.md"
         try:
             logger.info(f"Using Gemini CLI to fix and push changes to {branch_name}")
@@ -312,7 +321,7 @@ Remember: Return ONLY the JSON object."""
             logger.debug(f"Wrote review comments to {feedback_file}")
             
             # Construct prompt for Gemini CLI
-            prompt = f"""You are a developer working on a Pull Request. You have received review comments.
+            default_pr_prompt = """You are a developer working on a Pull Request. You have received review comments.
 To fix the issues, please:
 1. Read the review comments from `feedback.md` in the root directory.
 2. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
@@ -323,7 +332,9 @@ To fix the issues, please:
 7. Push to branch: {branch_name}
 
 Proceed with fixing the issues, committing, and pushing."""
-            
+
+            prompt = self._get_prompt_template("pr_feedback", default_pr_prompt, branch_name=branch_name)
+
             # Run Gemini CLI in the repository directory with YOLO mode (auto-approve)
             cmd = [
                 self.cli_path,
@@ -389,30 +400,12 @@ Proceed with fixing the issues, committing, and pushing."""
         issue_title: str,
         issue_body: str
     ) -> dict:
-        """Use Gemini CLI to solve a GitHub issue and push changes.
-        
-        Gemini CLI will:
-        1. Read and analyze the issue description
-        2. Read relevant files in the repository
-        3. Implement the fix/feature
-        4. Create appropriate commit message
-        5. Commit and push changes
-        
-        Args:
-            repo_path: Path to local repository
-            branch_name: Branch name to push to
-            issue_number: Issue number
-            issue_title: Issue title
-            issue_body: Issue description/body
-            
-        Returns:
-            dict: Result with 'success' boolean and 'message' string
-        """
+        """Use Gemini CLI to solve a GitHub issue and push changes."""
         try:
             logger.info(f"Using Gemini CLI to solve issue #{issue_number} and push to {branch_name}")
             
             # Construct prompt for Gemini CLI
-            prompt = f"""You are a developer working on resolving a GitHub Issue. Here are the details:
+            default_issue_prompt = """You are a developer working on resolving a GitHub Issue. Here are the details:
 
 Issue #{issue_number}: {issue_title}
 
@@ -428,6 +421,15 @@ Please:
 6. Push to branch: {branch_name}
 
 Proceed with implementing the solution, committing, and pushing."""
+
+            prompt = self._get_prompt_template(
+                "issue_resolution", 
+                default_issue_prompt, 
+                issue_number=issue_number,
+                issue_title=issue_title,
+                issue_body=issue_body,
+                branch_name=branch_name
+            )
             
             # Run Gemini CLI in the repository directory with YOLO mode (auto-approve)
             cmd = [

@@ -47,6 +47,25 @@ class IssueHandler:
         
         logger.info("Issue handler initialized")
     
+    def _record_run_history(self, target_type: str, target_id: str, status: str, details: str = "") -> None:
+        """Record the run outcome to the dashboard SQLite database."""
+        try:
+            import sqlite3
+            from pathlib import Path
+            db_path = Path.cwd() / ".agent_data" / "dashboard.sqlite"
+            if db_path.exists():
+                repo_name = self.repo_path.name if self.repo_path else "unknown"
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO run_history (target_repo, target_type, target_id, status, details) VALUES (?, ?, ?, ?, ?)",
+                    (repo_name, target_type, str(target_id), status, details[:200])
+                )
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            logger.debug(f"Failed to record run history: {e}")
+
     def process_issues(self) -> ProcessingResult:
         """Process all assigned issues.
         
@@ -81,11 +100,14 @@ class IssueHandler:
                 success = self._process_single_issue(issue)
                 if success:
                     result.add_success()
+                    self._record_run_history("ISSUE", issue.number, "SUCCESS", "Resolved and created PR")
                 else:
                     result.add_failure(f"Issue #{issue.number} processing returned False")
+                    self._record_run_history("ISSUE", issue.number, "FAILED", "Processing returned False")
             except Exception as e:
                 logger.error(f"Error processing issue #{issue.number}: {e}", exc_info=True)
                 result.add_failure(f"Issue #{issue.number}: {str(e)}")
+                self._record_run_history("ISSUE", issue.number, "FAILED", str(e))
         
         logger.info(f"Issue processing complete: {result.successful}/{result.total} successful")
         return result

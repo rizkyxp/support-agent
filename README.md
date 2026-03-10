@@ -12,6 +12,7 @@ Autonomous AI developer agent yang mengotomatisasi penanganan GitHub Issues dan 
 - **Flexible Processing**: Process issues only, PRs only, atau keduanya
 - **GitHub CLI Integration**: OAuth authentication, no token needed
 - **Gemini CLI Support**: Support Gemini Pro untuk kualitas code generation terbaik
+- **Web UI Control Panel**: Manage agents, update configurations, monitor logs, & edit workspace contexts tanpa coding.
 
 ## 🚀 Quick Start
 
@@ -54,6 +55,21 @@ GITHUB_ORGANIZATION=your-organization-name
 ```
 
 ### 4. Run
+
+**Opsi 1: Menggunakan Web UI Control Panel (Direkomendasikan)**
+
+```bash
+# Mac / Linux
+chmod +x start.sh
+./start.sh
+
+# Windows
+start.bat
+```
+
+Buka browser dan akses: `http://localhost:8000`.
+
+**Opsi 2: Menggunakan CLI**
 
 ```bash
 # Continuous mode (check every 5 minutes, default)
@@ -106,7 +122,19 @@ REPOSITORIES_DIR=repositories
 
 ## 🎮 Usage
 
-### Continuous Mode (Default)
+### Web UI Control Panel
+
+Control panel menyediakan antarmuka modern untuk mengatur agent:
+
+- **Execution Control**: Start/stop agent dan lihat live logs.
+- **Global Configuration**: Edit token API, target branch, dan konfigurasi repo.
+- **Prompt Tools**: Buat dan edit template prompt custom untuk PR feedback & Issue solver.
+- **Workspaces & Rules**: Edit file `.context` dan `.agents` di tiap repository menggunakan code editor.
+- **Queue Observer**: Lihat riwayat aktivitas PR dan Issue execution.
+
+Jalankan dengan: `./start.sh` (Mac/Linux) atau `start.bat` (Windows).
+
+### Continuous Mode CLI (Default)
 
 Agent berjalan terus menerus dan check setiap 5 menit:
 
@@ -250,7 +278,7 @@ docker logs -f github-agent
 Docker Compose:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 services:
   github-agent:
     build: .
@@ -344,6 +372,7 @@ GEMINI_CLI_PATH=/usr/local/bin/gemini
 ### "No issues or PRs to process"
 
 Ini normal jika:
+
 - Tidak ada issues assigned ke Anda
 - Tidak ada PRs dengan "changes requested"
 - Semua work sudah diprocess
@@ -384,11 +413,11 @@ python3 -m src.main --log-level DEBUG 2>&1 | grep "repository-name"
 
 ### Resource Usage
 
-| Scenario | CPU | Memory | Disk |
-|----------|-----|--------|------|
-| Scanning repos | 10-20% | ~100MB | Minimal |
+| Scenario         | CPU    | Memory | Disk               |
+| ---------------- | ------ | ------ | ------------------ |
+| Scanning repos   | 10-20% | ~100MB | Minimal            |
 | Processing issue | 20-30% | ~200MB | ~50-200MB per repo |
-| Processing PR | 20-30% | ~200MB | ~50-200MB per repo |
+| Processing PR    | 20-30% | ~200MB | ~50-200MB per repo |
 
 ### Scalability
 
@@ -477,15 +506,20 @@ A: Saat ini belum ada built-in feature. Anda bisa modify `src/multi_repo_agent.p
 
 ```
 github-ai-agent/
+├── dashboard/                     # Web UI Control Panel
+│   ├── main.py                    # FastAPI server
+│   ├── database.py                # SQLite config storage
+│   ├── routes/                    # API Endpoints
+│   └── templates/                 # HTML UI
 ├── src/
-│   ├── main.py                    # Entry point
-│   ├── config.py                  # Configuration
+│   ├── main.py                    # Entry point CLI
+│   ├── config.py                  # Configuration reader
 │   ├── multi_repo_agent.py        # Main orchestrator
 │   ├── repository_manager.py      # Repository management
 │   ├── clients/
 │   │   ├── gemini_client.py       # Gemini API client
 │   │   ├── gemini_cli_client.py   # Gemini CLI client
-│   │   ├── github_client.py       # GitHub API client (legacy)
+│   │   ├── github_client.py       # GitHub API client
 │   │   └── github_cli_client.py   # GitHub CLI client
 │   ├── git/
 │   │   └── git_manager.py         # Git operations
@@ -497,8 +531,11 @@ github-ai-agent/
 │   └── utils/
 │       └── errors.py              # Custom exceptions
 ├── repositories/                  # Auto-created, cloned repos
-├── .env                           # Configuration (create from .env.example)
+├── .agent_data/                   # SQLite database control panel
+├── .env                           # Configuration (create dari .env.example)
 ├── .env.example                   # Configuration template
+├── start.sh                       # Start script (Mac/Linux)
+├── start.bat                      # Start script (Windows)
 ├── requirements.txt               # Python dependencies
 └── README.md                      # This file
 ```
@@ -524,21 +561,18 @@ GitHub AI Agent adalah autonomous developer agent yang:
 ## 🚀 Get Started in 3 Minutes
 
 ```bash
-# 1. Install
-pip3 install -r requirements.txt
-brew install gh
-npm install -g @google/generative-ai-cli
+# 1. Install & Run
+# macOS / Linux
+chmod +x start.sh
+./start.sh
 
-# 2. Authenticate
-gh auth login
-gemini auth login
+# Windows
+start.bat
 
-# 3. Configure
-cp .env.example .env
-nano .env  # Set GITHUB_ORGANIZATION only
-
-# 4. Run
-python3 -m src.main
+# 2. Control Panel
+# Open http://localhost:8000 in your browser
+# Setup your Gemini CLI and GitHub CLI auth
+# Configure your rules and enjoy zero-code execution!
 
 # Done! 🎉
 ```
@@ -552,6 +586,7 @@ python3 -m src.main
 ## 💬 Support
 
 Untuk issues atau questions:
+
 - Check troubleshooting section di atas
 - Run dengan `--log-level DEBUG` untuk detail
 - Open issue di GitHub repository
