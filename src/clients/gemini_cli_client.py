@@ -312,7 +312,7 @@ Remember: Return ONLY the JSON object."""
         review_comments: str
     ) -> dict:
         """Use Gemini CLI to fix code based on review comments and push changes."""
-        feedback_file = repo_path / ".agents" / "feedback.md"
+        feedback_file = repo_path / "feedback.md"
         try:
             logger.info(f"Using Gemini CLI to fix and push changes to {branch_name}")
             
@@ -322,16 +322,23 @@ Remember: Return ONLY the JSON object."""
             
             # Construct prompt for Gemini CLI
             default_pr_prompt = """You are a developer working on a Pull Request. You have received review comments.
-To fix the issues, please:
-1. Read the review comments from `.agents/feedback.md` in the root directory.
-2. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
-3. Read the other relevant files in the repository to understand the context.
-4. Fix all issues mentioned in the `.agents/feedback.md` file, ensuring your code adheres to the project standards found in step 2.
-5. Create a professional, descriptive commit message. The first line (title) MUST be a concise summary of the ACTUAL changes made (e.g., "fix: resolve Santri login session timeout"). Avoid generic titles like "Address review feedback".
-6. Commit the changes. **CRITICAL: NEVER commit or stage the `.agents/feedback.md` file.**
-7. Push to branch: {branch_name}
 
-Proceed with fixing the issues, committing, and pushing."""
+**Pre-conditions:**
+Ensure you are on the correct branch: {branch_name}. If not, checkout to this branch first.
+
+**Instructions:**
+1. Read the review comments from `feedback.md` in the root directory.
+2. IMPORTANT: Read any context files in the `.agents/`, `.context/`, or `.gemini/` directories (if they exist) to understand project standards and architecture.
+3. Read the other relevant files in the repository to understand the context.
+4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
+5. **CONSTRAINT:** Strictly scope your changes to address the feedback. Do NOT refactor or modify unrelated code.
+6. **VALIDATION:** Before committing, review your changes (diff) to ensure all points in `feedback.md` are resolved and no syntax errors were introduced. (Run project linters or tests if you have the capability).
+7. Create an appropriate, descriptive commit message based on what you fixed.
+8. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
+9. Push the changes to branch: {branch_name}.
+
+**Output:**
+Once finished, reply with a brief summary of the fixes applied, the files modified, and confirm that the changes have been pushed successfully."""
 
             prompt = self._get_prompt_template("pr_feedback", default_pr_prompt, branch_name=branch_name)
 
