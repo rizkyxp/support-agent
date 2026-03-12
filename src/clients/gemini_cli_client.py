@@ -312,7 +312,7 @@ Remember: Return ONLY the JSON object."""
         review_comments: str
     ) -> dict:
         """Use Gemini CLI to fix code based on review comments and push changes."""
-        feedback_file = repo_path / ".gemini_feedback.md"
+        feedback_file = repo_path / "feedback.md"
         try:
             logger.info(f"Using Gemini CLI to fix and push changes to {branch_name}")
             
@@ -323,12 +323,12 @@ Remember: Return ONLY the JSON object."""
             # Construct prompt for Gemini CLI
             default_pr_prompt = """You are a developer working on a Pull Request. You have received review comments.
 To fix the issues, please:
-1. Read the review comments from `.gemini_feedback.md` in the root directory.
+1. Read the review comments from `feedback.md` in the root directory.
 2. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
 3. Read the other relevant files in the repository to understand the context.
-4. Fix all issues mentioned in the `.gemini_feedback.md` file, ensuring your code adheres to the project standards found in step 2.
+4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
 5. Create an appropriate commit message based on what you fixed.
-6. Commit the changes. **CRITICAL: NEVER commit or stage the `.gemini_feedback.md` file.**
+6. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
 7. Push to branch: {branch_name}
 
 Proceed with fixing the issues, committing, and pushing."""
