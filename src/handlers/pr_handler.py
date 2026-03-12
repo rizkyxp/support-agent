@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -152,17 +152,19 @@ class PRHandler:
             self.git_manager.checkout_and_pull(pr.head_branch)
             
             # Step 2: Get last review request timestamp for this PR
-            # Try GitHub first for more accurate sync
-            last_request_time = self.github_client.get_latest_changes_requested_time(pr.number)
+            # Use ONLY our local record for filtering to ensure we don't accidentally 
+            # skip comments that were submitted as part of the "Changes Requested" review.
+            last_request_time = self._get_last_review_request_time(pr.number)
             
-            # Fallback to local file if GitHub doesn't have it (or as a safety check)
-            if not last_request_time:
-                last_request_time = self._get_last_review_request_time(pr.number)
+            # Informational only: check when GitHub says changes were requested
+            remote_time = self.github_client.get_latest_changes_requested_time(pr.number)
                 
             if last_request_time:
-                logger.info(f"Filtering comments created after: {last_request_time}")
+                logger.info(f"Filtering comments created after bot's last action: {last_request_time}")
+                if remote_time:
+                    logger.debug(f"Latest remote Changes Requested was at: {remote_time}")
             else:
-                logger.info("No previous review timestamp found, processing all comments")
+                logger.info("No previous local review record found, processing all comments")
             
             # Step 3: Get review comments
             logger.info("Fetching review comments")
@@ -280,7 +282,11 @@ class PRHandler:
             timestamp_str = data.get(str(pr_number))
             
             if timestamp_str:
-                return datetime.fromisoformat(timestamp_str)
+                dt = datetime.fromisoformat(timestamp_str)
+                if dt.tzinfo is None:
+                    # Correctly convert local wall-clock time to UTC
+                    dt = dt.astimezone(timezone.utc)
+                return dt
             
             return None
             
@@ -307,7 +313,7 @@ class PRHandler:
                     pass
             
             # Update timestamp for this PR
-            data[str(pr_number)] = datetime.now().isoformat()
+            data[str(pr_number)] = datetime.now(timezone.utc).isoformat()
             
             # Save back to file
             self.last_review_request_file.write_text(json.dumps(data, indent=2))

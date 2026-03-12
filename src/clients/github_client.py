@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from github import Github, GithubException
 from github.Issue import Issue as GHIssue
@@ -223,7 +223,7 @@ class GitHubClient:
                         file_path=None,
                         line=None,
                         reviewer=review.user.login,
-                        created_at=review.submitted_at or datetime.now()
+                        created_at=review.submitted_at or datetime.now(timezone.utc)
                     )
                     comments.append(comment)
             

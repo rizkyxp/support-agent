@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import subprocess
 from collections import deque
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -25,7 +26,7 @@ async def start_agent(req: RunRequest):
     if agent_process is not None and agent_process.poll() is None:
         return {"status": "error", "message": "Agent is already running"}
         
-    cmd = ["python3", "-m", "src.main"]
+    cmd = [sys.executable, "-m", "src.main"]
     
     # Map request to args
     cmd.extend(["--interval", str(req.interval)])

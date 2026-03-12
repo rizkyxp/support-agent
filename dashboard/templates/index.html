@@ -308,8 +308,8 @@
                         <div class="glass-panel p-6 rounded-xl border-gray-800">
                             <label class="block text-sm font-medium text-gray-400 mb-2">Execution Mode</label>
                             <div class="flex items-center justify-between bg-gray-900 rounded-lg p-3 border border-gray-700 hover:border-gray-500 transition-colors">
-                                <span class="text-white text-sm"><i class="fa-solid fa-arrows-spin text-primary-500 mr-2"></i>Interval (Seconds)</span>
-                                <input type="number" id="run-interval" value="300" class="w-20 bg-gray-800 text-white text-sm text-center font-bold px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-primary-500">
+                                <span class="text-white text-sm"><i class="fa-solid fa-arrows-spin text-primary-500 mr-2"></i>Interval (Minutes)</span>
+                                <input type="number" id="run-interval" value="5" class="w-20 bg-gray-800 text-white text-sm text-center font-bold px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-primary-500">
                             </div>
                             <p class="text-xs text-gray-500 mt-2">Set to 0 for a Single Run.</p>
                         </div>
@@ -456,7 +456,7 @@
                     // Control Actions
                     async function startRunner() {
                         const payload = {
-                            interval: parseInt(document.getElementById('run-interval').value) || 0,
+                            interval: (parseInt(document.getElementById('run-interval').value) || 0) * 60,
                             process_prs: document.getElementById('chk-pr').checked,
                             process_issues: document.getElementById('chk-issue').checked,
                             log_level: document.getElementById('log-level').value
@@ -736,10 +736,10 @@
                     const defaultPrompts = {
                         pr_feedback: `You are a developer working on a Pull Request. You have received review comments.
 To fix the issues, please:
-1. Read the review comments from \`feedback.md\` in the root directory.
+1. Read the review comments from \`.agents/feedback.md\` in the root directory.
 2. IMPORTANT: Read any context files in the \`.agents/\` or \`.context/\` directory (if they exist) to understand project standards and architecture.
 3. Read the other relevant files in the repository to understand the context.
-4. Fix all issues mentioned in the \`feedback.md\` file, ensuring your code adheres to the project standards found in step 2.
+4. Fix all issues mentioned in the \`.agents/feedback.md\` file, ensuring your code adheres to the project standards found in step 2.
 5. Create an appropriate commit message based on what you fixed.
 6. Commit the changes.
 7. Push to branch: {branch_name}

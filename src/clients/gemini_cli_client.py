@@ -312,7 +312,7 @@ Remember: Return ONLY the JSON object."""
         review_comments: str
     ) -> dict:
         """Use Gemini CLI to fix code based on review comments and push changes."""
-        feedback_file = repo_path / "feedback.md"
+        feedback_file = repo_path / ".agents" / "feedback.md"
         try:
             logger.info(f"Using Gemini CLI to fix and push changes to {branch_name}")
             
@@ -323,12 +323,12 @@ Remember: Return ONLY the JSON object."""
             # Construct prompt for Gemini CLI
             default_pr_prompt = """You are a developer working on a Pull Request. You have received review comments.
 To fix the issues, please:
-1. Read the review comments from `feedback.md` in the root directory.
+1. Read the review comments from `.agents/feedback.md` in the root directory.
 2. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
 3. Read the other relevant files in the repository to understand the context.
-4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
-5. Create an appropriate commit message based on what you fixed.
-6. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
+4. Fix all issues mentioned in the `.agents/feedback.md` file, ensuring your code adheres to the project standards found in step 2.
+5. Create a professional, descriptive commit message. The first line (title) MUST be a concise summary of the ACTUAL changes made (e.g., "fix: resolve Santri login session timeout"). Avoid generic titles like "Address review feedback".
+6. Commit the changes. **CRITICAL: NEVER commit or stage the `.agents/feedback.md` file.**
 7. Push to branch: {branch_name}
 
 Proceed with fixing the issues, committing, and pushing."""
@@ -416,7 +416,7 @@ Please:
 1. IMPORTANT: Read any context files in the `.agents/` or `.context/` directory (if they exist) to understand project standards and architecture.
 2. Read the relevant files in the repository to understand the codebase.
 3. Implement the fix or feature described in the issue, ensuring your code adheres to the project standards found in step 1.
-4. Create an appropriate commit message that references issue #{issue_number}
+4. Create a professional, descriptive commit message that references issue #{issue_number}. The first line (title) MUST be a concise summary of the changes (e.g., "feat: add registration email validation"). Avoid generic titles.
 5. Commit the changes
 6. Push to branch: {branch_name}
 
