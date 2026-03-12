@@ -99,15 +99,8 @@ class PRHandler:
             for pr_dict in prs_data:
                 try:
                     # Get full PR details including branch names
-                    pr_details = self.github_client.get_pr_details(pr_dict['number'])
-                    
-                    pr = PullRequest(
-                        number=pr_details['number'],
-                        title=pr_details['title'],
-                        head_branch=pr_details['headRefName'],
-                        base_branch=pr_details['baseRefName'],
-                        author=pr_details['author']['login']
-                    )
+                    # Both clients now return a PullRequest object
+                    pr = self.github_client.get_pr_details(pr_dict['number'])
                     prs.append(pr)
                 except Exception as e:
                     logger.error(f"Failed to convert PR #{pr_dict.get('number', '?')}: {e}")

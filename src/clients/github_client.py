@@ -174,6 +174,29 @@ class GitHubClient:
         except Exception as e:
             logger.warning(f"Failed to fetch latest CHANGES_REQUESTED time for PR #{pr_number}: {e}")
             return None
+            
+    def get_pr_details(self, pr_number: int) -> PullRequest:
+        """Get detailed Pull Request information.
+        
+        Args:
+            pr_number: Pull request number
+            
+        Returns:
+            PullRequest object
+        """
+        try:
+            logger.info(f"Fetching details for PR #{pr_number}")
+            gh_pr = self.repo.get_pull(pr_number)
+            
+            return PullRequest(
+                number=gh_pr.number,
+                title=gh_pr.title,
+                head_branch=gh_pr.head.ref,
+                base_branch=gh_pr.base.ref,
+                author=gh_pr.user.login
+            )
+        except GithubException as e:
+            raise GitHubAPIError(f"Failed to fetch PR details for #{pr_number}: {e}")
     
     def get_review_comments(self, pr_number: int) -> list[ReviewComment]:
         """Get all review comments for a PR.

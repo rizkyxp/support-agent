@@ -3,9 +3,12 @@
 import json
 import logging
 import subprocess
+import re
+from datetime import datetime
 from typing import List, Dict, Optional
 
 from src.utils.errors import GitHubAPIError
+from src.models.data_models import Issue, PullRequest, ReviewComment
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +75,23 @@ class GitHubCLIClient:
             raise GitHubAPIError(f"Cannot set repository {repo_name}: no organization specified and no full_repo_name provided")
         logger.debug(f"Set current repository: {self.current_repo}")
     
+    def _parse_datetime(self, date_str: str) -> datetime:
+        """Parse GitHub ISO8601 timestamp accurately.
+        
+        Handles various formats including with/without milliseconds.
+        Example: 2024-03-12T01:11:16Z
+        """
+        if not date_str:
+            return datetime.now()
+            
+        try:
+            # Clean up the format - replace Z with +00:00 for fromisoformat
+            clean_date = date_str.replace('Z', '+00:00')
+            return datetime.fromisoformat(clean_date)
+        except Exception as e:
+            logger.warning(f"Failed to parse datetime '{date_str}': {e}")
+            return datetime.now()
+
     def get_organization_repositories(self) -> List[str]:
         """Get all repositories in organization.
         
@@ -237,11 +257,11 @@ class GitHubCLIClient:
             logger.error(f"Error searching PRs with changes requested: {e}")
             return {}
     
-    def get_assigned_issues(self) -> List[Dict]:
+    def get_assigned_issues(self) -> List[Issue]:
         """Get issues assigned to authenticated user in current repository.
         
         Returns:
-            List of issue dictionaries
+            List of Issue objects
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -268,7 +288,16 @@ class GitHubCLIClient:
                 logger.warning(f"Failed to get issues: {result.stderr}")
                 return []
             
-            issues = json.loads(result.stdout)
+            issues_data = json.loads(result.stdout)
+            issues = []
+            for item in issues_data:
+                issues.append(Issue(
+                    number=item['number'],
+                    title=item['title'],
+                    body=item['body'] or "",
+                    assignee="@me" # We filtered by @me
+                ))
+            
             logger.debug(f"Found {len(issues)} assigned issues in {self.current_repo}")
             return issues
             
@@ -276,11 +305,11 @@ class GitHubCLIClient:
             logger.error(f"Error getting assigned issues: {e}")
             return []
     
-    def get_prs_with_changes_requested(self) -> List[Dict]:
+    def get_prs_with_changes_requested(self) -> List[PullRequest]:
         """Get PRs with changes requested for authenticated user.
         
         Returns:
-            List of PR dictionaries
+            List of PullRequest objects
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -292,7 +321,7 @@ class GitHubCLIClient:
                 "--repo", self.current_repo,
                 "--author", "@me",
                 "--state", "open",
-                "--json", "number,title,url,reviewDecision,reviews",
+                "--json", "number,title,url,reviewDecision,reviews,headRefName,baseRefName,author",
                 "--limit", "100"
             ]
             
@@ -307,21 +336,28 @@ class GitHubCLIClient:
                 logger.warning(f"Failed to get PRs: {result.stderr}")
                 return []
             
-            all_prs = json.loads(result.stdout)
+            all_prs_data = json.loads(result.stdout)
             
             # Filter PRs with changes requested
-            # Check both reviewDecision and individual reviews
             prs_with_changes = []
-            for pr in all_prs:
+            for pr_item in all_prs_data:
                 # Check reviewDecision field
-                if pr.get('reviewDecision') == 'CHANGES_REQUESTED':
-                    prs_with_changes.append(pr)
-                    continue
+                has_changes_requested = pr_item.get('reviewDecision') == 'CHANGES_REQUESTED'
                 
-                # Also check individual reviews for CHANGES_REQUESTED state
-                reviews = pr.get('reviews', [])
-                if any(review.get('state') == 'CHANGES_REQUESTED' for review in reviews):
-                    prs_with_changes.append(pr)
+                # Also check individual reviews
+                if not has_changes_requested:
+                    reviews = pr_item.get('reviews', [])
+                    has_changes_requested = any(review.get('state') == 'CHANGES_REQUESTED' for review in reviews)
+                
+                if has_changes_requested:
+                    author_login = pr_item.get('author', {}).get('login', '') if isinstance(pr_item.get('author'), dict) else ''
+                    prs_with_changes.append(PullRequest(
+                        number=pr_item['number'],
+                        title=pr_item['title'],
+                        head_branch=pr_item['headRefName'],
+                        base_branch=pr_item['baseRefName'],
+                        author=author_login
+                    ))
             
             logger.debug(f"Found {len(prs_with_changes)} PRs with changes requested in {self.current_repo}")
             return prs_with_changes
@@ -329,15 +365,68 @@ class GitHubCLIClient:
         except Exception as e:
             logger.error(f"Error getting PRs with changes requested: {e}")
             return []
+
+    def get_latest_changes_requested_time(self, pr_number: int) -> Optional[datetime]:
+        """Get the timestamp of the latest review with CHANGES_REQUESTED state.
+        
+        Args:
+            pr_number: Pull request number
+            
+        Returns:
+            datetime: Timestamp of the latest CHANGES_REQUESTED review, or None if not found
+        """
+        if not self.current_repo:
+            return None
+            
+        try:
+            logger.info(f"Fetching latest CHANGES_REQUESTED review for PR #{pr_number}")
+            cmd = [
+                self.cli_path, "pr", "view", str(pr_number),
+                "--repo", self.current_repo,
+                "--json", "reviews"
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                return None
+                
+            data = json.loads(result.stdout)
+            reviews = data.get('reviews', [])
+            
+            latest_time = None
+            for review in reviews:
+                if review.get('state') == "CHANGES_REQUESTED":
+                    submitted_at = review.get('submittedAt')
+                    if submitted_at:
+                        timestamp = self._parse_datetime(submitted_at)
+                        if latest_time is None or timestamp > latest_time:
+                            latest_time = timestamp
+            
+            if latest_time:
+                logger.info(f"Latest CHANGES_REQUESTED for PR #{pr_number} was at {latest_time}")
+            else:
+                logger.info(f"No CHANGES_REQUESTED review found for PR #{pr_number}")
+                
+            return latest_time
+            
+        except Exception as e:
+            logger.warning(f"Failed to fetch latest CHANGES_REQUESTED time for PR #{pr_number}: {e}")
+            return None
     
-    def get_issue(self, issue_number: int) -> Dict:
+    def get_issue(self, issue_number: int) -> Issue:
         """Get issue details.
         
         Args:
             issue_number: Issue number
             
         Returns:
-            Issue dictionary
+            Issue object
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -346,7 +435,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "issue", "view", str(issue_number),
                 "--repo", self.current_repo,
-                "--json", "number,title,body,url"
+                "--json", "number,title,body,url,author"
             ]
             
             result = subprocess.run(
@@ -359,8 +448,15 @@ class GitHubCLIClient:
             if result.returncode != 0:
                 raise GitHubAPIError(f"Failed to get issue: {result.stderr}")
             
-            issue = json.loads(result.stdout)
-            return issue
+            item = json.loads(result.stdout)
+            author_login = item.get('author', {}).get('login', '') if isinstance(item.get('author'), dict) else ''
+            
+            return Issue(
+                number=item['number'],
+                title=item['title'],
+                body=item['body'] or "",
+                assignee=author_login # Using author as fallback for display
+            )
             
         except Exception as e:
             logger.error(f"Error getting issue #{issue_number}: {e}")
@@ -372,7 +468,7 @@ class GitHubCLIClient:
         body: str,
         head_branch: str,
         base_branch: str = "main"
-    ) -> Dict:
+    ) -> PullRequest:
         """Create a pull request.
         
         Args:
@@ -382,7 +478,7 @@ class GitHubCLIClient:
             base_branch: Target branch (default: main)
             
         Returns:
-            PR dictionary with url
+            PullRequest object
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -408,22 +504,42 @@ class GitHubCLIClient:
                 raise GitHubAPIError(f"Failed to create PR: {result.stderr}")
             
             pr_url = result.stdout.strip()
+            # Extract PR number from URL if possible, otherwise we'll need another call
+            # URL format: https://github.com/org/repo/pull/123
+            pr_number = 0
+            try:
+                pr_number = int(pr_url.split('/')[-1])
+            except:
+                pass
+                
             logger.info(f"Created PR: {pr_url}")
             
-            return {'url': pr_url}
+            # Since we need a PullRequest object with more details, 
+            # and pr create only returns the URL, we might need to fetch details
+            if pr_number > 0:
+                return self.get_pr_details(pr_number)
+            
+            # Fallback if we couldn't get the number
+            return PullRequest(
+                number=0,
+                title=title,
+                head_branch=head_branch,
+                base_branch=base_branch,
+                author="@me"
+            )
             
         except Exception as e:
             logger.error(f"Error creating PR: {e}")
             raise GitHubAPIError(f"Failed to create PR: {e}")
     
-    def get_pr_details(self, pr_number: int) -> Dict:
-        """Get detailed PR information including branch names.
+    def get_pr_details(self, pr_number: int) -> PullRequest:
+        """Get detailed PR information.
         
         Args:
             pr_number: PR number
             
         Returns:
-            Dict with PR details including headRefName and baseRefName
+            PullRequest object
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -445,25 +561,33 @@ class GitHubCLIClient:
             if result.returncode != 0:
                 raise GitHubAPIError(f"Failed to get PR details: {result.stderr}")
             
-            pr_details = json.loads(result.stdout)
-            return pr_details
+            pr_data = json.loads(result.stdout)
+            author_login = pr_data.get('author', {}).get('login', '') if isinstance(pr_data.get('author'), dict) else ''
+            
+            return PullRequest(
+                number=pr_data['number'],
+                title=pr_data['title'],
+                head_branch=pr_data['headRefName'],
+                base_branch=pr_data['baseRefName'],
+                author=author_login
+            )
             
         except Exception as e:
             logger.error(f"Error getting PR details #{pr_number}: {e}")
             raise GitHubAPIError(f"Failed to get PR details: {e}")
     
-    def get_review_comments(self, pr_number: int) -> List[Dict]:
+    def get_review_comments(self, pr_number: int) -> List[ReviewComment]:
         """Get review comments for a PR (alias for get_pr_review_comments).
         
         Args:
             pr_number: PR number
             
         Returns:
-            List of review comment dictionaries
+            List of ReviewComment objects
         """
         return self.get_pr_review_comments(pr_number)
     
-    def get_pr_review_comments(self, pr_number: int) -> List[Dict]:
+    def get_pr_review_comments(self, pr_number: int) -> List[ReviewComment]:
         """Get all review comments for a PR.
         
         Fetches:
@@ -475,12 +599,7 @@ class GitHubCLIClient:
             pr_number: PR number
             
         Returns:
-            List of review comment dictionaries with keys:
-                - body: Comment text
-                - author: Reviewer username
-                - submittedAt: Timestamp
-                - file_path: (optional) File path for inline comments
-                - line: (optional) Line number for inline comments
+            List of ReviewComment objects
         """
         if not self.current_repo:
             raise GitHubAPIError("No repository set. Call set_repository() first.")
@@ -507,11 +626,17 @@ class GitHubCLIClient:
                 for line in result.stdout.strip().split('\n'):
                     if line:
                         try:
-                            review = json.loads(line)
-                            # Only include if body is not empty and not just common state changes without messages
-                            if review.get('body', '').strip():
-                                all_comments.append(review)
-                        except json.JSONDecodeError:
+                            review_data = json.loads(line)
+                            # Only include if body is not empty
+                            if review_data.get('body', '').strip():
+                                all_comments.append(ReviewComment(
+                                    body=review_data['body'],
+                                    file_path=None,
+                                    line=None,
+                                    reviewer=review_data['author'],
+                                    created_at=self._parse_datetime(review_data['submittedAt'])
+                                ))
+                        except (json.JSONDecodeError, KeyError):
                             continue
             else:
                 logger.warning(f"Failed to get PR reviews: {result.stderr}")
@@ -537,14 +662,21 @@ class GitHubCLIClient:
                 for line in result.stdout.strip().split('\n'):
                     if line:
                         try:
-                            comment = json.loads(line)
+                            comment_data = json.loads(line)
                             # Use original_line as fallback if line is None
-                            if comment.get('line') is None:
-                                comment['line'] = comment.get('original_line')
-                            # Remove helper fields
-                            comment.pop('original_line', None)
-                            all_comments.append(comment)
-                        except json.JSONDecodeError:
+                            line_num = comment_data.get('line')
+                            if line_num is None:
+                                line_num = comment_data.get('original_line')
+                                
+                            all_comments.append(ReviewComment(
+                                body=comment_data['body'],
+                                file_path=comment_data['file_path'],
+                                line=line_num,
+                                reviewer=comment_data['author'],
+                                created_at=self._parse_datetime(comment_data['submittedAt']),
+                                diff_hunk=comment_data.get('diff_hunk')
+                            ))
+                        except (json.JSONDecodeError, KeyError):
                             continue
             else:
                 logger.warning(f"Failed to get inline review comments: {result.stderr}")
@@ -571,10 +703,16 @@ class GitHubCLIClient:
                 for line in result.stdout.strip().split('\n'):
                     if line:
                         try:
-                            comment = json.loads(line)
-                            if comment.get('body', '').strip():
-                                all_comments.append(comment)
-                        except json.JSONDecodeError:
+                            comment_data = json.loads(line)
+                            if comment_data.get('body', '').strip():
+                                all_comments.append(ReviewComment(
+                                    body=comment_data['body'],
+                                    file_path=None,
+                                    line=None,
+                                    reviewer=comment_data['author'],
+                                    created_at=self._parse_datetime(comment_data['submittedAt'])
+                                ))
+                        except (json.JSONDecodeError, KeyError):
                             continue
             else:
                 logger.warning(f"Failed to get PR general comments: {result.stderr}")
