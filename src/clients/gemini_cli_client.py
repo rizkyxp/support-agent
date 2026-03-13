@@ -333,7 +333,7 @@ Ensure you are on the correct branch: {branch_name}. If not, checkout to this br
 4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
 5. **CONSTRAINT:** Strictly scope your changes to address the feedback. Do NOT refactor or modify unrelated code.
 6. **VALIDATION:** Before committing, review your changes (diff) to ensure all points in `feedback.md` are resolved and no syntax errors were introduced. (Run project linters or tests if you have the capability).
-7. Create an appropriate, descriptive commit message based on what you fixed.
+7. Create a professional, descriptive commit message. The first line (title) MUST be a concise summary of the ACTUAL changes made (e.g., "fix: resolve login timeout"). Avoid generic titles like "Address review feedback".
 8. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
 9. Push the changes to branch: {branch_name}.
 
