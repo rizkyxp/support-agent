@@ -223,7 +223,8 @@ class GitHubClient:
                         file_path=None,
                         line=None,
                         reviewer=review.user.login,
-                        created_at=review.submitted_at or datetime.now(timezone.utc)
+                        created_at=review.submitted_at or datetime.now(timezone.utc),
+                        id=review.id
                     )
                     comments.append(comment)
             
@@ -236,7 +237,8 @@ class GitHubClient:
                     line=rc.line,
                     reviewer=rc.user.login,
                     created_at=rc.created_at,
-                    is_resolved=rc.resolved
+                    is_resolved=rc.resolved,
+                    id=rc.id
                 )
                 comments.append(comment)
                 
@@ -249,7 +251,8 @@ class GitHubClient:
                         file_path=None,
                         line=None,
                         reviewer=ic.user.login,
-                        created_at=ic.created_at
+                        created_at=ic.created_at,
+                        id=ic.id
                     )
                     comments.append(comment)
             
@@ -324,3 +327,22 @@ class GitHubClient:
             
         except GithubException as e:
             raise GitHubAPIError(f"Failed to request review for PR #{pr_number}: {e}")
+
+    def resolve_review_comment(self, comment_id: int) -> None:
+        """Mark a review comment as resolved.
+        
+        Args:
+            comment_id: The ID of the review comment to resolve.
+            
+        Raises:
+            GitHubAPIError: If the operation fails.
+        """
+        try:
+            logger.info(f"Resolving review comment #{comment_id}")
+            comment = self.repo.get_pull_review_comment(comment_id)
+            comment.edit(body=comment.body, resolved=True)
+            logger.info(f"Successfully resolved comment #{comment_id}")
+        except Exception as e:
+            logger.warning(f"Failed to resolve comment #{comment_id}: {e}")
+            # Don't raise here to avoid breaking the whole PR processing flow
+            # if only one comment resolution fails.

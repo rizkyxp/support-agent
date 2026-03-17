@@ -612,7 +612,7 @@ class GitHubCLIClient:
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
                 "--json", "reviews",
-                "--jq", '.reviews[] | {body: .body, author: .author.login, submittedAt: .submittedAt, state: .state}'
+                "--jq", '.reviews[] | {body: .body, author: .author.login, submittedAt: .submittedAt, state: .state, id: .id}'
             ]
             
             result = subprocess.run(
@@ -634,7 +634,8 @@ class GitHubCLIClient:
                                     file_path=None,
                                     line=None,
                                     reviewer=review_data['author'],
-                                    created_at=self._parse_datetime(review_data['submittedAt'])
+                                    created_at=self._parse_datetime(review_data['submittedAt']),
+                                    id=review_data.get('id')
                                 ))
                         except (json.JSONDecodeError, KeyError):
                             continue
@@ -648,7 +649,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "api",
                 f"repos/{self.current_repo}/pulls/{pr_number}/comments",
-                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk, resolved: .resolved}'
+                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk, resolved: .resolved, id: .id}'
             ]
             
             result = subprocess.run(
@@ -675,6 +676,7 @@ class GitHubCLIClient:
                                 reviewer=comment_data['author'],
                                 created_at=self._parse_datetime(comment_data['submittedAt']),
                                 is_resolved=comment_data.get('resolved', False),
+                                id=comment_data.get('id'),
                                 diff_hunk=comment_data.get('diff_hunk')
                             ))
                         except (json.JSONDecodeError, KeyError):
@@ -690,7 +692,7 @@ class GitHubCLIClient:
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
                 "--json", "comments",
-                "--jq", '.comments[] | {body: .body, author: .author.login, submittedAt: .createdAt}'
+                "--jq", '.comments[] | {body: .body, author: .author.login, submittedAt: .createdAt, id: .id}'
             ]
             
             result = subprocess.run(
@@ -711,7 +713,8 @@ class GitHubCLIClient:
                                     file_path=None,
                                     line=None,
                                     reviewer=comment_data['author'],
-                                    created_at=self._parse_datetime(comment_data['submittedAt'])
+                                    created_at=self._parse_datetime(comment_data['submittedAt']),
+                                    id=comment_data.get('id')
                                 ))
                         except (json.JSONDecodeError, KeyError):
                             continue
@@ -874,3 +877,38 @@ class GitHubCLIClient:
         except Exception as e:
             logger.error(f"Error adding PR comment: {e}")
             raise GitHubAPIError(f"Failed to add comment: {e}")
+
+    def resolve_review_comment(self, comment_id: int) -> None:
+        """Mark a review comment as resolved.
+        
+        Args:
+            comment_id: The ID of the review comment to resolve.
+            
+        Raises:
+            GitHubAPIError: If the operation fails.
+        """
+        if not self.current_repo:
+            return
+            
+        try:
+            logger.info(f"Resolving review comment #{comment_id} via CLI")
+            cmd = [
+                self.cli_path, "api",
+                f"repos/{self.current_repo}/pulls/comments/{comment_id}",
+                "-X", "PATCH",
+                "-f", "resolved=true"
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"Successfully resolved comment #{comment_id}")
+            else:
+                logger.warning(f"Failed to resolve comment #{comment_id}: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error resolving review comment #{comment_id}: {e}")

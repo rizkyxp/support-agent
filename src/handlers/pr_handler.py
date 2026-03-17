@@ -212,15 +212,24 @@ class PRHandler:
             
             logger.info("Gemini CLI successfully fixed and pushed changes")
             
-            # Step 6: Get reviewers who requested changes
+            # Step 6: Resolve the comments that were processed
+            logger.info(f"Resolving {len(comments)} processed comments")
+            for comment in comments:
+                if comment.id:
+                    try:
+                        self.github_client.resolve_review_comment(comment.id)
+                    except Exception as e:
+                        logger.warning(f"Failed to resolve comment {comment.id}: {e}")
+            
+            # Step 7: Get reviewers who requested changes
             reviewers = self._get_reviewers_who_requested_changes(comments)
             
-            # Step 7: Re-request review (no comment posting)
+            # Step 8: Re-request review (no comment posting)
             if reviewers:
                 logger.info(f"Re-requesting review from: {reviewers}")
                 self.github_client.request_review(pr.number, reviewers)
                 
-                # Step 8: Save timestamp of this review request
+                # Step 9: Save timestamp of this review request
                 self._save_review_request_time(pr.number)
                 logger.info(f"Saved review request timestamp for PR #{pr.number}")
             
