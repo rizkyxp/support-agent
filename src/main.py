@@ -55,6 +55,13 @@ def parse_args() -> argparse.Namespace:
         help='Process only assigned issues (skip PRs)'
     )
     parser.add_argument(
+        '--no-auto-request-review',
+        action='store_false',
+        dest='auto_request_review',
+        default=True,
+        help='Disable automatically requesting a review after fixing a PR'
+    )
+    parser.add_argument(
         '--interval',
         type=int,
         default=300,
@@ -102,6 +109,11 @@ def main() -> int:
         else:
             # No flags: use config from .env (default: both)
             logger.info(f"Processing mode: Issues={config.process_issues}, PRs={config.process_prs}")
+        
+        # Apply auto request review override
+        if not args.auto_request_review:
+            logger.info("Auto-request review disabled via command line")
+            config.auto_request_review = False
         
         # Check if running in loop mode or single run
         if args.interval == 0:

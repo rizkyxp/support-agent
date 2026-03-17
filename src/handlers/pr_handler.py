@@ -151,20 +151,27 @@ class PRHandler:
             logger.info(f"Checking out to PR branch: {pr.head_branch}")
             self.git_manager.checkout_and_pull(pr.head_branch)
             
-            # Step 2: Get last review request timestamp for this PR
-            # Use ONLY our local record for filtering to ensure we don't accidentally 
-            # skip comments that were submitted as part of the "Changes Requested" review.
+            # Step 2: Get filtering boundary
             last_request_time = self._get_last_review_request_time(pr.number)
-            
-            # Informational only: check when GitHub says changes were requested
             remote_time = self.github_client.get_latest_changes_requested_time(pr.number)
+            
+            # Determine initial boundary
+            filter_boundary = last_request_time
+            
+            if remote_time:
+                # Add 5 minute safety buffer before remote_time to capture inline comments 
+                # submitted with the review
+                from datetime import timedelta
+                buffered_remote = remote_time - timedelta(minutes=5)
                 
-            if last_request_time:
-                logger.info(f"Filtering comments created after bot's last action: {last_request_time}")
-                if remote_time:
-                    logger.debug(f"Latest remote Changes Requested was at: {remote_time}")
+                if filter_boundary is None or buffered_remote > filter_boundary:
+                    filter_boundary = buffered_remote
+                    logger.info(f"Using buffered remote Changes Requested boundary: {filter_boundary}")
+            
+            if not filter_boundary:
+                logger.info("No previous filter boundary found, processing all unresolved comments")
             else:
-                logger.info("No previous local review record found, processing all comments")
+                logger.info(f"Filtering comments created after: {filter_boundary}")
             
             # Step 3: Get review comments
             logger.info("Fetching review comments")
@@ -174,18 +181,26 @@ class PRHandler:
             comments = []
             for comment in comments_all:
                 try:
-                    # Filter: only include unresolved comments after last review request
+                    # Log basic info for debugging
+                    comment_id_str = f"#{comment.id}" if comment.id else "no-id"
+                    logger.debug(f"Evaluating comment {comment_id_str} from {comment.reviewer} (created {comment.created_at}, resolved={comment.is_resolved})")
+                    
+                    # Filter 1: Resolution status
                     if comment.is_resolved:
-                        logger.debug(f"Skipping resolved comment from {comment.reviewer}")
+                        logger.info(f"Skipping comment {comment_id_str}: Already marked as resolved")
                         continue
                         
-                    if last_request_time is None or comment.created_at > last_request_time:
-                        comments.append(comment)
-                    else:
-                        logger.debug(f"Skipping old comment from {comment.reviewer} (created at {comment.created_at})")
-                        
+                    # Filter 2: Timestamp boundary
+                    if filter_boundary is not None and comment.created_at <= filter_boundary:
+                        logger.info(f"Skipping comment {comment_id_str}: Created before/at filter boundary ({comment.created_at} <= {filter_boundary})")
+                        continue
+                    
+                    # If we passed both filters, include the comment
+                    logger.info(f"Accepted comment {comment_id_str} for processing")
+                    comments.append(comment)
+                    
                 except Exception as e:
-                    logger.warning(f"Failed to process review comment: {e}")
+                    logger.warning(f"Failed to evaluate review comment: {e}")
                     continue
             
             if not comments:
@@ -225,13 +240,15 @@ class PRHandler:
             reviewers = self._get_reviewers_who_requested_changes(comments)
             
             # Step 8: Re-request review (no comment posting)
-            if reviewers:
+            if reviewers and self.config.auto_request_review:
                 logger.info(f"Re-requesting review from: {reviewers}")
                 self.github_client.request_review(pr.number, reviewers)
                 
                 # Step 9: Save timestamp of this review request
                 self._save_review_request_time(pr.number)
                 logger.info(f"Saved review request timestamp for PR #{pr.number}")
+            elif reviewers:
+                logger.info(f"Skipping review re-request automatically due to config flag.")
             
             logger.info(f"Successfully processed PR #{pr.number}")
             return True

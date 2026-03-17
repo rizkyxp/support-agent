@@ -18,6 +18,7 @@ class RunRequest(BaseModel):
     process_prs: bool = True
     process_issues: bool = True
     log_level: str = "INFO"
+    auto_request_review: bool = True
 
 @router.post("/start")
 async def start_agent(req: RunRequest):
@@ -37,6 +38,9 @@ async def start_agent(req: RunRequest):
         cmd.append("--pr")
     elif req.process_issues:
         cmd.append("--issue")
+        
+    if not req.auto_request_review:
+        cmd.append("--no-auto-request-review")
         
     cmd.extend(["--log-level", req.log_level])
     

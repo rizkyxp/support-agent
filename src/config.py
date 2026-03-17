@@ -25,6 +25,7 @@ class Configuration:
     gemini_cli_model: Optional[str] = None  # None = auto-detect
     process_issues: bool = True  # Enable/disable issue processing
     process_prs: bool = True  # Enable/disable PR processing
+    auto_request_review: bool = True  # Enable/disable auto-request review after fixing
     data_dir: Path = Path.cwd() / ".agent_data"  # Directory for agent metadata
     
     @classmethod
@@ -98,6 +99,7 @@ class Configuration:
         # Processing mode configuration
         process_issues = os.getenv("PROCESS_ISSUES", "true").lower() in ("true", "1", "yes")
         process_prs = os.getenv("PROCESS_PRS", "true").lower() in ("true", "1", "yes")
+        auto_request_review = os.getenv("AUTO_REQUEST_REVIEW", "true").lower() in ("true", "1", "yes")
         
         # Resolve repositories directory path - always relative to project root
         repositories_dir = Path.cwd() / repositories_dir_str
@@ -115,7 +117,8 @@ class Configuration:
             gemini_cli_path=gemini_cli_path,
             gemini_cli_model=gemini_cli_model,
             process_issues=process_issues,
-            process_prs=process_prs
+            process_prs=process_prs,
+            auto_request_review=auto_request_review
         )
         
         # Validate configuration
