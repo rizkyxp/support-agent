@@ -238,7 +238,9 @@ class GitHubClient:
                         line=None,
                         reviewer=review.user.login,
                         created_at=review.submitted_at or datetime.now(timezone.utc),
-                        id=review.id
+                        id=str(review.id),
+                        node_id=review.node_id,
+                        comment_type="review"
                     )
                     comments.append(comment)
             
@@ -252,7 +254,9 @@ class GitHubClient:
                     reviewer=rc.user.login,
                     created_at=rc.created_at,
                     is_resolved=rc.resolved,
-                    id=rc.id
+                    id=str(rc.id),
+                    node_id=rc.node_id,
+                    comment_type="inline"
                 )
                 comments.append(comment)
                 
@@ -266,7 +270,9 @@ class GitHubClient:
                         line=None,
                         reviewer=ic.user.login,
                         created_at=ic.created_at,
-                        id=ic.id
+                        id=str(ic.id),
+                        node_id=ic.node_id,
+                        comment_type="issue"
                     )
                     comments.append(comment)
             
@@ -342,11 +348,12 @@ class GitHubClient:
         except GithubException as e:
             raise GitHubAPIError(f"Failed to request review for PR #{pr_number}: {e}")
 
-    def resolve_review_comment(self, comment_id: int) -> None:
+    def resolve_review_comment(self, comment_id: str, node_id: Optional[str] = None) -> None:
         """Mark a review comment as resolved.
         
         Args:
             comment_id: The ID of the review comment to resolve.
+            node_id: Optional GraphQL node ID for more robust resolution.
             
         Raises:
             GitHubAPIError: If the operation fails.

@@ -240,9 +240,10 @@ class PRHandler:
             # Step 6: Resolve the comments that were processed
             logger.info(f"Resolving {len(comments)} processed comments")
             for comment in comments:
-                if comment.id:
+                # Only "inline" comments can be resolved. "review" and "issue" comments don't have a resolved state.
+                if comment.id and comment.comment_type == "inline":
                     try:
-                        self.github_client.resolve_review_comment(comment.id)
+                        self.github_client.resolve_review_comment(comment.id, node_id=comment.node_id)
                     except Exception as e:
                         logger.warning(f"Failed to resolve comment {comment.id}: {e}")
             

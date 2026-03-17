@@ -623,7 +623,7 @@ class GitHubCLIClient:
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
                 "--json", "reviews",
-                "--jq", '.reviews[] | {body: .body, author: .author.login, submittedAt: .submittedAt, state: .state, id: .id}'
+                "--jq", '.reviews[] | {body: .body, author: .author.login, submittedAt: .submittedAt, state: .state, id: .id, node_id: .id}'
             ]
             
             result = subprocess.run(
@@ -646,7 +646,9 @@ class GitHubCLIClient:
                                     line=None,
                                     reviewer=review_data['author'],
                                     created_at=self._parse_datetime(review_data['submittedAt']),
-                                    id=review_data.get('id')
+                                    id=str(review_data.get('id')),
+                                    node_id=str(review_data.get('node_id')),
+                                    comment_type="review"
                                 ))
                         except (json.JSONDecodeError, KeyError):
                             continue
@@ -660,7 +662,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "api",
                 f"repos/{self.current_repo}/pulls/{pr_number}/comments",
-                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk, resolved: .resolved, id: .id}'
+                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk, resolved: .resolved, id: .id, node_id: .node_id}'
             ]
             
             result = subprocess.run(
@@ -687,8 +689,10 @@ class GitHubCLIClient:
                                 reviewer=comment_data['author'],
                                 created_at=self._parse_datetime(comment_data['submittedAt']),
                                 is_resolved=comment_data.get('resolved', False),
-                                id=comment_data.get('id'),
-                                diff_hunk=comment_data.get('diff_hunk')
+                                id=str(comment_data.get('id')),
+                                node_id=str(comment_data.get('node_id')),
+                                diff_hunk=comment_data.get('diff_hunk'),
+                                comment_type="inline"
                             ))
                         except (json.JSONDecodeError, KeyError):
                             continue
@@ -703,7 +707,7 @@ class GitHubCLIClient:
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
                 "--json", "comments",
-                "--jq", '.comments[] | {body: .body, author: .author.login, submittedAt: .createdAt, id: .id}'
+                "--jq", '.comments[] | {body: .body, author: .author.login, submittedAt: .createdAt, id: .id, node_id: .id}'
             ]
             
             result = subprocess.run(
@@ -725,7 +729,9 @@ class GitHubCLIClient:
                                     line=None,
                                     reviewer=comment_data['author'],
                                     created_at=self._parse_datetime(comment_data['submittedAt']),
-                                    id=comment_data.get('id')
+                                    id=str(comment_data.get('id')),
+                                    node_id=str(comment_data.get('node_id')),
+                                    comment_type="issue"
                                 ))
                         except (json.JSONDecodeError, KeyError):
                             continue
@@ -889,11 +895,14 @@ class GitHubCLIClient:
             logger.error(f"Error adding PR comment: {e}")
             raise GitHubAPIError(f"Failed to add comment: {e}")
 
-    def resolve_review_comment(self, comment_id: int) -> None:
+    def resolve_review_comment(self, comment_id: str, node_id: Optional[str] = None) -> None:
         """Mark a review comment as resolved.
         
+        Uses GraphQL mutation to resolve the entire thread associated with the comment.
+        
         Args:
-            comment_id: The ID of the review comment to resolve.
+            comment_id: The ID of the review comment.
+            node_id: Optional GraphQL node ID for the comment.
             
         Raises:
             GitHubAPIError: If the operation fails.
@@ -901,25 +910,85 @@ class GitHubCLIClient:
         if not self.current_repo:
             return
             
+        target_node_id = node_id or comment_id
+        if not target_node_id:
+            return
+
+        # Reviews (PRR_...) cannot be resolved, only inline comments (PRRC_...)
+        if target_node_id.startswith('PRR_'):
+            logger.debug(f"Skipping resolution for review object: {target_node_id}")
+            return
+            
         try:
-            logger.info(f"Resolving review comment #{comment_id} via CLI")
-            cmd = [
-                self.cli_path, "api",
-                f"repos/{self.current_repo}/pulls/comments/{comment_id}",
-                "-X", "PATCH",
-                "-f", "resolved=true"
+            logger.info(f"Resolving review comment thread for ID {target_node_id} via GraphQL")
+            
+            # Step 1: Get the thread ID for this comment node
+            # We use a query that handles both PullRequestReviewComment and generic nodes
+            thread_query = """
+            query($commentId: ID!) {
+              node(id: $commentId) {
+                ... on PullRequestReviewComment {
+                  pullRequestReviewThread {
+                    id
+                  }
+                }
+              }
+            }
+            """
+            
+            get_thread_cmd = [
+                self.cli_path, "api", "graphql",
+                "-f", f"commentId={target_node_id}",
+                "-f", f"query={thread_query}"
             ]
             
-            result = subprocess.run(
-                cmd,
+            thread_result = subprocess.run(
+                get_thread_cmd,
                 capture_output=True,
                 text=True,
                 timeout=30
             )
             
-            if result.returncode == 0:
-                logger.info(f"Successfully resolved comment #{comment_id}")
+            if thread_result.returncode != 0:
+                logger.warning(f"Failed to get thread ID for comment {target_node_id}: {thread_result.stderr}")
+                return
+
+            thread_data = json.loads(thread_result.stdout)
+            thread_id = thread_data.get('data', {}).get('node', {}).get('pullRequestReviewThread', {}).get('id')
+            
+            if not thread_id:
+                logger.warning(f"Could not find thread ID for comment {target_node_id}")
+                return
+                
+            # Step 2: Resolve the thread
+            logger.info(f"Resolving thread {thread_id}")
+            resolve_mutation = """
+            mutation($threadId: ID!) {
+              resolveReviewThread(input: {threadId: $threadId}) {
+                thread {
+                  isResolved
+                }
+              }
+            }
+            """
+            
+            resolve_cmd = [
+                self.cli_path, "api", "graphql",
+                "-f", f"threadId={thread_id}",
+                "-f", f"query={resolve_mutation}"
+            ]
+            
+            resolve_result = subprocess.run(
+                resolve_cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if resolve_result.returncode == 0:
+                logger.info(f"Successfully resolved thread for comment {target_node_id}")
             else:
-                logger.warning(f"Failed to resolve comment #{comment_id}: {result.stderr}")
+                logger.warning(f"Failed to resolve thread for comment {target_node_id}: {resolve_result.stderr}")
+                
         except Exception as e:
-            logger.warning(f"Error resolving review comment #{comment_id}: {e}")
+            logger.warning(f"Error resolving review comment {target_node_id}: {e}")

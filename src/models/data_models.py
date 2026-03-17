@@ -34,8 +34,10 @@ class ReviewComment:
     reviewer: str
     created_at: datetime
     is_resolved: bool = False
-    id: Optional[int] = None
+    id: Optional[str] = None
+    node_id: Optional[str] = None
     diff_hunk: Optional[str] = None
+    comment_type: str = "inline"  # "inline", "review", "issue"
 
 
 @dataclass
