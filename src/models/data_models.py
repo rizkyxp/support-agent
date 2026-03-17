@@ -32,6 +32,7 @@ class ReviewComment:
     line: Optional[int]
     reviewer: str
     created_at: datetime
+    is_resolved: bool = False
     diff_hunk: Optional[str] = None
 
 

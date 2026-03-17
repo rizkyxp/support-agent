@@ -235,7 +235,8 @@ class GitHubClient:
                     file_path=rc.path,
                     line=rc.line,
                     reviewer=rc.user.login,
-                    created_at=rc.created_at
+                    created_at=rc.created_at,
+                    is_resolved=rc.resolved
                 )
                 comments.append(comment)
                 

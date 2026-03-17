@@ -648,7 +648,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "api",
                 f"repos/{self.current_repo}/pulls/{pr_number}/comments",
-                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk}'
+                "--jq", '.[] | {body: .body, author: .user.login, submittedAt: .created_at, file_path: .path, line: .line, original_line: .original_line, diff_hunk: .diff_hunk, resolved: .resolved}'
             ]
             
             result = subprocess.run(
@@ -674,6 +674,7 @@ class GitHubCLIClient:
                                 line=line_num,
                                 reviewer=comment_data['author'],
                                 created_at=self._parse_datetime(comment_data['submittedAt']),
+                                is_resolved=comment_data.get('resolved', False),
                                 diff_hunk=comment_data.get('diff_hunk')
                             ))
                         except (json.JSONDecodeError, KeyError):

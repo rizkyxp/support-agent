@@ -170,11 +170,15 @@ class PRHandler:
             logger.info("Fetching review comments")
             comments_all = self.github_client.get_review_comments(pr.number)
             
-            # Filter comments by timestamp
+            # Filter comments by timestamp and resolution status
             comments = []
             for comment in comments_all:
                 try:
-                    # Filter: only include comments after last review request
+                    # Filter: only include unresolved comments after last review request
+                    if comment.is_resolved:
+                        logger.debug(f"Skipping resolved comment from {comment.reviewer}")
+                        continue
+                        
                     if last_request_time is None or comment.created_at > last_request_time:
                         comments.append(comment)
                     else:
