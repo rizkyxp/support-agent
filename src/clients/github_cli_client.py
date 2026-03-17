@@ -548,7 +548,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
-                "--json", "number,title,headRefName,baseRefName,author"
+                "--json", "number,title,headRefName,baseRefName,author,commits"
             ]
             
             result = subprocess.run(
@@ -564,12 +564,23 @@ class GitHubCLIClient:
             pr_data = json.loads(result.stdout)
             author_login = pr_data.get('author', {}).get('login', '') if isinstance(pr_data.get('author'), dict) else ''
             
+            # Get latest commit time
+            last_commit_at = None
+            commits = pr_data.get('commits', [])
+            if commits:
+                # Commits are in chronological order, last is most recent
+                last_commit = commits[-1]
+                authored_date = last_commit.get('authoredDate')
+                if authored_date:
+                    last_commit_at = self._parse_datetime(authored_date)
+            
             return PullRequest(
                 number=pr_data['number'],
                 title=pr_data['title'],
                 head_branch=pr_data['headRefName'],
                 base_branch=pr_data['baseRefName'],
-                author=author_login
+                author=author_login,
+                last_commit_at=last_commit_at
             )
             
         except Exception as e:

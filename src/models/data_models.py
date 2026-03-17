@@ -22,6 +22,7 @@ class PullRequest:
     head_branch: str
     base_branch: str
     author: str
+    last_commit_at: Optional[datetime] = None
 
 
 @dataclass

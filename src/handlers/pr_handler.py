@@ -154,10 +154,12 @@ class PRHandler:
             # Step 2: Get filtering boundary
             last_request_time = self._get_last_review_request_time(pr.number)
             remote_time = self.github_client.get_latest_changes_requested_time(pr.number)
+            last_commit_time = pr.last_commit_at
             
-            # Determine initial boundary
+            # Determine boundary
             filter_boundary = last_request_time
             
+            # 1. Incorporate latest Changes Requested time
             if remote_time:
                 # Add 5 minute safety buffer before remote_time to capture inline comments 
                 # submitted with the review
@@ -167,11 +169,19 @@ class PRHandler:
                 if filter_boundary is None or buffered_remote > filter_boundary:
                     filter_boundary = buffered_remote
                     logger.info(f"Using buffered remote Changes Requested boundary: {filter_boundary}")
+
+            # 2. Incorporate latest commit time
+            # If a commit was made after the last review request or bot action,
+            # we should skip any comments before that commit as they are presumably handled.
+            if last_commit_time:
+                if filter_boundary is None or last_commit_time > filter_boundary:
+                    filter_boundary = last_commit_time
+                    logger.info(f"Using latest commit boundary: {filter_boundary}")
             
             if not filter_boundary:
                 logger.info("No previous filter boundary found, processing all unresolved comments")
             else:
-                logger.info(f"Filtering comments created after: {filter_boundary}")
+                logger.info(f"Final filtering boundary: {filter_boundary}")
             
             # Step 3: Get review comments
             logger.info("Fetching review comments")

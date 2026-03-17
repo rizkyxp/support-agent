@@ -188,12 +188,26 @@ class GitHubClient:
             logger.info(f"Fetching details for PR #{pr_number}")
             gh_pr = self.repo.get_pull(pr_number)
             
+            # Get latest commit time
+            last_commit_at = None
+            try:
+                # get_commits() returns commits in chronological order
+                commits = gh_pr.get_commits()
+                if commits.totalCount > 0:
+                    last_commit = commits[commits.totalCount - 1]
+                    last_commit_at = last_commit.commit.author.date
+                    if last_commit_at and last_commit_at.tzinfo is None:
+                        last_commit_at = last_commit_at.replace(tzinfo=timezone.utc)
+            except Exception as e:
+                logger.warning(f"Failed to get latest commit for PR #{pr_number}: {e}")
+            
             return PullRequest(
                 number=gh_pr.number,
                 title=gh_pr.title,
                 head_branch=gh_pr.head.ref,
                 base_branch=gh_pr.base.ref,
-                author=gh_pr.user.login
+                author=gh_pr.user.login,
+                last_commit_at=last_commit_at
             )
         except GithubException as e:
             raise GitHubAPIError(f"Failed to fetch PR details for #{pr_number}: {e}")
