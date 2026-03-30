@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.utils.errors import GeminiAPIError, JSONParseError
-from src.models.data_models import Solution
+from src.models.data_models import Solution, PullRequest
 
 
 logger = logging.getLogger(__name__)
@@ -309,7 +309,8 @@ Remember: Return ONLY the JSON object."""
         self,
         repo_path: Path,
         branch_name: str,
-        review_comments: str
+        review_comments: str,
+        pr_details: Optional[PullRequest] = None
     ) -> dict:
         """Use Gemini CLI to fix code based on review comments and push changes."""
         feedback_file = repo_path / "feedback.md"
@@ -330,17 +331,35 @@ Ensure you are on the correct branch: {branch_name}. If not, checkout to this br
 1. Read the review comments from `feedback.md` in the root directory.
 2. IMPORTANT: Read any context files in the `.agents/`, `.context/`, or `.gemini/` directories (if they exist) to understand project standards and architecture.
 3. Read the other relevant files in the repository to understand the context.
-4. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
-5. **CONSTRAINT:** Strictly scope your changes to address the feedback. Do NOT refactor or modify unrelated code.
-6. **VALIDATION:** Before committing, review your changes (diff) to ensure all points in `feedback.md` are resolved and no syntax errors were introduced. (Run project linters or tests if you have the capability).
-7. Create a professional, descriptive commit message. The first line (title) MUST be a concise summary of the ACTUAL changes made (e.g., "fix: resolve login timeout"). Avoid generic titles like "Address review feedback".
-8. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
-9. Push the changes to branch: {branch_name}.
+4. **CONTEXT - ORIGINAL PR MESSAGE:**
+{pr_body}
+
+5. **CONTEXT - ORIGINAL PR CHANGES (Manual Work to Protect):**
+{pr_diff}
+
+6. Fix all issues mentioned in the `feedback.md` file, ensuring your code adheres to the project standards found in step 2.
+7. **PROTECTION RULES (CRITICAL):**
+   - **DO NOT** revert or delete manual changes shown in the "ORIGINAL PR CHANGES" section above unless the feedback explicitly asks to change that specific logic.
+   - **DO NOT** modify files that are part of the PR but not mentioned in the feedback.
+   - Strictly scope your changes to address the feedback. Do NOT refactor or modify unrelated code.
+8. **VALIDATION:** Before committing, review your changes (diff) to ensure all points in `feedback.md` are resolved and no manual developer work was accidentally reverted.
+9. Create a professional, descriptive commit message. The first line (title) MUST be a concise summary of the ACTUAL changes made.
+10. Commit the changes. **CRITICAL: NEVER commit or stage the `feedback.md` file.**
+11. Push the changes to branch: {branch_name}.
 
 **Output:**
 Once finished, reply with a brief summary of the fixes applied, the files modified, and confirm that the changes have been pushed successfully."""
 
-            prompt = self._get_prompt_template("pr_feedback", default_pr_prompt, branch_name=branch_name)
+            pr_body = pr_details.body if pr_details else "No PR description provided."
+            pr_diff = pr_details.diff if pr_details else "No PR diff context provided."
+            
+            prompt = self._get_prompt_template(
+                "pr_feedback", 
+                default_pr_prompt, 
+                branch_name=branch_name,
+                pr_body=pr_body,
+                pr_diff=pr_diff
+            )
 
             # Run Gemini CLI in the repository directory with YOLO mode (auto-approve)
             cmd = [

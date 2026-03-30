@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 from git import Repo, GitCommandError
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RepositoryManager:
     """Manager for handling multiple repositories in organization."""
     
-    def __init__(self, config: Configuration, github_client: Union['GitHubClient', 'GitHubCLIClient']):
+    def __init__(self, config: Configuration, github_client: 'GitHubCLIClient'):
         """Initialize repository manager.
         
         Args:

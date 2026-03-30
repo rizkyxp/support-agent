@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from src.config import Configuration
-from src.clients.gemini_client import GeminiClient
 from src.clients.gemini_cli_client import GeminiCLIClient
-from src.clients.github_client import GitHubClient
 from src.clients.github_cli_client import GitHubCLIClient
 from src.git.git_manager import GitManager
 from src.handlers.issue_handler import IssueHandler
@@ -34,30 +32,19 @@ class MultiRepoAgent:
         # Initialize shared clients
         logger.info("Initializing multi-repo agent components")
         
-        # Initialize Gemini client (API or CLI based on config)
-        if config.use_gemini_cli:
-            logger.info("Using Gemini CLI for code generation (Pro account)")
-            self.gemini_client = GeminiCLIClient(
-                cli_path=config.gemini_cli_path,
-                model=config.gemini_cli_model
-            )
-        else:
-            logger.info("Using Gemini API for code generation")
-            self.gemini_client = GeminiClient(api_key=config.gemini_api_key)
+        # Initialize Gemini CLI client
+        logger.info("Using Gemini CLI for code generation (Pro account)")
+        self.gemini_client = GeminiCLIClient(
+            cli_path=config.gemini_cli_path,
+            model=config.gemini_cli_model
+        )
         
-        # Initialize GitHub client (CLI or API based on config)
-        if config.use_github_cli:
-            logger.info("Using GitHub CLI for GitHub operations")
-            self.github_client = GitHubCLIClient(
-                cli_path=config.github_cli_path,
-                organization=config.github_organization
-            )
-        else:
-            logger.info("Using GitHub API for GitHub operations")
-            self.github_client = GitHubClient(
-                token=config.github_token,
-                organization=config.github_organization
-            )
+        # Initialize GitHub CLI client
+        logger.info("Using GitHub CLI for GitHub operations")
+        self.github_client = GitHubCLIClient(
+            cli_path=config.github_cli_path,
+            organization=config.github_organization
+        )
         
         # Initialize repository manager
         self.repo_manager = RepositoryManager(

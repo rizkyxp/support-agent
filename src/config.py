@@ -13,20 +13,23 @@ from src.utils.errors import ConfigurationError
 class Configuration:
     """Agent configuration loaded from environment."""
     
-    gemini_api_key: str
     github_organization: Optional[str]  # Optional - reads all orgs if not specified
     repositories_dir: Path
-    use_github_cli: bool = True  # Default to GitHub CLI
     github_cli_path: str = "gh"
-    github_token: Optional[str] = None  # Optional, for API mode only
     default_target_base_branch: str = "main"
-    use_gemini_cli: bool = False
     gemini_cli_path: str = "gemini"
     gemini_cli_model: Optional[str] = None  # None = auto-detect
     process_issues: bool = True  # Enable/disable issue processing
     process_prs: bool = True  # Enable/disable PR processing
     auto_request_review: bool = True  # Enable/disable auto-request review after fixing
     data_dir: Path = Path.cwd() / ".agent_data"  # Directory for agent metadata
+    
+    # Change Protection Settings
+    change_protection_enabled: bool = True     # Enable/disable change protection system
+    change_protection_mode: str = "warn"       # "warn" (log warning) or "halt" (stop before push)
+    dry_run_mode: bool = False                 # Preview changes without pushing
+    max_pr_diff_size: int = 50000              # Max characters of PR diff in prompt
+    include_pr_diff_in_prompt: bool = True     # Include PR diff context in Gemini prompt
     
     @classmethod
     def load(cls, env_file: Optional[str] = None) -> "Configuration":
@@ -66,25 +69,7 @@ class Configuration:
 
         
         # Load required fields
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
         github_organization = os.getenv("GITHUB_ORGANIZATION") or os.getenv("GITHUB_ORG")  # Optional
-        
-        # Check if using GitHub CLI instead of token
-        use_github_cli = os.getenv("USE_GITHUB_CLI", "true").lower() in ("true", "1", "yes")
-        github_token = os.getenv("GITHUB_TOKEN")  # Optional if using CLI
-        
-        # Check if using Gemini CLI instead of API (default to true)
-        use_gemini_cli = os.getenv("USE_GEMINI_CLI", "true").lower() in ("true", "1", "yes")
-        
-        # Validate required fields
-        if not use_gemini_cli and not gemini_api_key:
-            raise ConfigurationError(
-                "GEMINI_API_KEY is required (or set USE_GEMINI_CLI=true to use Gemini CLI)"
-            )
-        if not use_github_cli and not github_token:
-            raise ConfigurationError(
-                "GITHUB_TOKEN is required (or set USE_GITHUB_CLI=true to use GitHub CLI)"
-            )
         
         # Load optional fields with defaults
         default_target_base_branch = os.getenv("DEFAULT_TARGET_BASE_BRANCH", "main")
@@ -101,24 +86,35 @@ class Configuration:
         process_prs = os.getenv("PROCESS_PRS", "true").lower() in ("true", "1", "yes")
         auto_request_review = os.getenv("AUTO_REQUEST_REVIEW", "true").lower() in ("true", "1", "yes")
         
+        # Change Protection Settings
+        change_protection_enabled = os.getenv("CHANGE_PROTECTION_ENABLED", "true").lower() in ("true", "1", "yes")
+        change_protection_mode = os.getenv("CHANGE_PROTECTION_MODE", "warn").lower()
+        if change_protection_mode not in ("warn", "halt"):
+            change_protection_mode = "warn"
+            
+        dry_run_mode = os.getenv("DRY_RUN_MODE", "false").lower() in ("true", "1", "yes")
+        max_pr_diff_size = int(os.getenv("MAX_PR_DIFF_SIZE", "50000"))
+        include_pr_diff_in_prompt = os.getenv("INCLUDE_PR_DIFF_IN_PROMPT", "true").lower() in ("true", "1", "yes")
+        
         # Resolve repositories directory path - always relative to project root
         repositories_dir = Path.cwd() / repositories_dir_str
         
         # Create configuration object
         config = cls(
-            gemini_api_key=gemini_api_key or "",  # Empty string if using CLI
             github_organization=github_organization,
             repositories_dir=repositories_dir,
-            use_github_cli=use_github_cli,
             github_cli_path=github_cli_path,
-            github_token=github_token,
             default_target_base_branch=default_target_base_branch,
-            use_gemini_cli=use_gemini_cli,
             gemini_cli_path=gemini_cli_path,
             gemini_cli_model=gemini_cli_model,
             process_issues=process_issues,
             process_prs=process_prs,
-            auto_request_review=auto_request_review
+            auto_request_review=auto_request_review,
+            change_protection_enabled=change_protection_enabled,
+            change_protection_mode=change_protection_mode,
+            dry_run_mode=dry_run_mode,
+            max_pr_diff_size=max_pr_diff_size,
+            include_pr_diff_in_prompt=include_pr_diff_in_prompt
         )
         
         # Validate configuration

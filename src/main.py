@@ -67,6 +67,21 @@ def parse_args() -> argparse.Namespace:
         default=300,
         help='Check interval in seconds (default: 300 = 5 minutes). Set to 0 for single run.'
     )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Preview changes without pushing (Change Protection mode: halt)'
+    )
+    parser.add_argument(
+        '--halt',
+        action='store_true',
+        help='Stop before pushing if any manual change is reverted (Human-in-the-Loop)'
+    )
+    parser.add_argument(
+        '--warn',
+        action='store_true',
+        help='Log warning but continue if manual change is reverted (Default)'
+    )
     return parser.parse_args()
 
 
@@ -114,6 +129,19 @@ def main() -> int:
         if not args.auto_request_review:
             logger.info("Auto-request review disabled via command line")
             config.auto_request_review = False
+            
+        # Apply Change Protection overrides
+        if args.dry_run:
+            logger.info("Dry-run mode enabled via command line")
+            config.dry_run_mode = True
+            config.change_protection_mode = "halt"
+            
+        if args.halt:
+            logger.info("Change protection: HALT mode enabled (Human-in-the-Loop)")
+            config.change_protection_mode = "halt"
+        elif args.warn:
+            logger.info("Change protection: WARN mode enabled")
+            config.change_protection_mode = "warn"
         
         # Check if running in loop mode or single run
         if args.interval == 0:

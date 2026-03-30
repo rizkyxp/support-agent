@@ -3,8 +3,8 @@
 import logging
 from pathlib import Path
 
-from src.clients.gemini_client import GeminiClient
-from src.clients.github_client import GitHubClient
+from src.clients.gemini_cli_client import GeminiCLIClient
+from src.clients.github_cli_client import GitHubCLIClient
 from src.git.git_manager import GitManager
 from src.config import Configuration
 from src.models.data_models import Issue, ProcessingResult
@@ -24,8 +24,8 @@ class IssueHandler:
     
     def __init__(
         self,
-        github_client: GitHubClient,
-        gemini_client: GeminiClient,
+        github_client: GitHubCLIClient,
+        gemini_client: GeminiCLIClient,
         git_manager: GitManager,
         config: Configuration,
         repo_path: Path = None

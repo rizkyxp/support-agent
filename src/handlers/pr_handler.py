@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from src.clients.gemini_client import GeminiClient
-from src.clients.github_client import GitHubClient
+from src.clients.gemini_cli_client import GeminiCLIClient
+from src.clients.github_cli_client import GitHubCLIClient
 from src.git.git_manager import GitManager
 from src.config import Configuration
-from src.models.data_models import PullRequest, ProcessingResult, ReviewComment
+from src.models.data_models import PullRequest, ProcessingResult, ReviewComment, ValidationResult
+from src.validators.change_validator import ChangeValidator
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +22,8 @@ class PRHandler:
     
     def __init__(
         self,
-        github_client: GitHubClient,
-        gemini_client: GeminiClient,
+        github_client: GitHubCLIClient,
+        gemini_client: GeminiCLIClient,
         git_manager: GitManager,
         config: Configuration,
         repo_path: Path = None
@@ -223,17 +224,65 @@ class PRHandler:
             logger.info(f"Formatting {len(comments)} review comments")
             formatted_comments = self._format_review_comments(comments)
             
+            # --- Change Protection Logic ---
+            pre_fix_commit = None
+            protected_files = []
+            
+            if self.config.change_protection_enabled:
+                logger.info("Change protection enabled, preparing context and snapshot")
+                
+                # Snapshot current commit
+                pre_fix_commit = self.git_manager.get_current_commit_hash()
+                
+                # Fetch fresh PR details (body, diff, changed files)
+                try:
+                    pr.body = self.github_client.get_pr_details(pr.number).body
+                    pr.changed_files = self.github_client.get_pr_files(pr.number)
+                    pr.diff = self.github_client.get_pr_diff(pr.number)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch full PR context for protection: {e}")
+                
+                # Identify protected files: files in PR that are NOT in current review comments
+                commented_files = {c.file_path for c in comments if c.file_path}
+                protected_files = [f for f in (pr.changed_files or []) if f not in commented_files]
+                
+                if protected_files:
+                    logger.info(f"Identified {len(protected_files)} protected files to preserve")
+                else:
+                    logger.info("No distinct protected files identified (all changed files are in review)")
+
             # Step 5: Delegate to Gemini CLI to fix, commit, and push
             logger.info("Delegating to Gemini CLI to fix, commit, and push")
             result = self.gemini_client.fix_and_push(
                 repo_path=self.repo_path,
                 branch_name=pr.head_branch,
-                review_comments=formatted_comments
+                review_comments=formatted_comments,
+                pr_details=pr
             )
             
             if not result['success']:
                 logger.error(f"Gemini CLI failed: {result['message']}")
                 return False
+            
+            # --- Post-Fix Validation ---
+            if self.config.change_protection_enabled and pre_fix_commit:
+                logger.info("Performing post-fix change validation")
+                validator = ChangeValidator(self.git_manager)
+                validation = validator.validate_changes(
+                    base_branch=pr.base_branch,
+                    protected_files=protected_files,
+                    pre_fix_commit=pre_fix_commit
+                )
+                
+                if not validation.is_valid:
+                    error_msg = f"Change Protection Violation detected in PR #{pr.number}:\n{validation.details}"
+                    if self.config.change_protection_mode == 'halt':
+                        logger.critical(f"HALTING: {error_msg}")
+                        logger.info("The push has already occurred. Manual intervention required to verify or rollback.")
+                        self._record_run_history("PR", pr.number, "HALTED", validation.details)
+                        return False # Stop here, don't resolve comments or request review
+                    else:
+                        logger.warning(f"WARNING: {error_msg}")
             
             logger.info("Gemini CLI successfully fixed and pushed changes")
             

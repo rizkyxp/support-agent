@@ -22,6 +22,9 @@ class PullRequest:
     head_branch: str
     base_branch: str
     author: str
+    body: Optional[str] = None           # PR Body text
+    diff: Optional[str] = None           # Full PR Diff
+    changed_files: list[str] = field(default_factory=list)  # List of changed filenames
     last_commit_at: Optional[datetime] = None
 
 
@@ -104,3 +107,12 @@ class ProcessingResult:
         """
         self.failed += 1
         self.errors.append(error)
+
+
+@dataclass
+class ValidationResult:
+    """Result of post-fix change validation."""
+    is_valid: bool
+    violations: list[str] = field(default_factory=list)  # Files incorrectly modified
+    deleted_files: list[str] = field(default_factory=list)  # Files incorrectly deleted
+    details: str = ""

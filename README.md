@@ -396,7 +396,6 @@ Pastikan `.env` file ada dan berisi:
 
 ```bash
 GITHUB_ORGANIZATION=your-org-name
-GEMINI_API_KEY=your-key
 ```
 
 ### Debug Mode
@@ -466,8 +465,6 @@ gh auth refresh -h github.com -s repo,read:org
 chmod 600 .env
 
 # Use environment-specific keys
-# Development: GEMINI_API_KEY_DEV
-# Production: GEMINI_API_KEY_PROD
 ```
 
 ## ❓ FAQ

@@ -548,7 +548,7 @@ class GitHubCLIClient:
             cmd = [
                 self.cli_path, "pr", "view", str(pr_number),
                 "--repo", self.current_repo,
-                "--json", "number,title,headRefName,baseRefName,author,commits"
+                "--json", "number,title,body,headRefName,baseRefName,author,commits"
             ]
             
             result = subprocess.run(
@@ -580,6 +580,7 @@ class GitHubCLIClient:
                 head_branch=pr_data['headRefName'],
                 base_branch=pr_data['baseRefName'],
                 author=author_login,
+                body=pr_data.get('body', ""),
                 last_commit_at=last_commit_at
             )
             

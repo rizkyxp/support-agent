@@ -157,3 +157,77 @@ class GitManager:
             str: Current branch name
         """
         return self.repo.active_branch.name
+
+    def get_current_commit_hash(self) -> str:
+        """Get current HEAD commit hash for rollback.
+        
+        Returns:
+            str: Full commit hash
+        """
+        return self.repo.head.commit.hexsha
+
+    def get_diff_against_base(self, base_branch: str) -> str:
+        """Get diff between current branch and base branch.
+        
+        Args:
+            base_branch: Name of the base branch to compare against.
+            
+        Returns:
+            str: The diff output
+        """
+        try:
+            # Ensure base branch is available locally
+            self.repo.git.fetch('origin', base_branch)
+            return self.repo.git.diff(f"origin/{base_branch}...HEAD")
+        except GitCommandError as e:
+            logger.warning(f"Failed to get diff against {base_branch}: {e}")
+            return ""
+
+    def get_changed_files_against_base(self, base_branch: str) -> list[str]:
+        """Get list of files changed compared to base branch.
+        
+        Args:
+            base_branch: Name of the base branch to compare against.
+            
+        Returns:
+            list[str]: List of file paths
+        """
+        try:
+            self.repo.git.fetch('origin', base_branch)
+            diff_output = self.repo.git.diff(f"origin/{base_branch}...HEAD", name_only=True)
+            return [f for f in diff_output.strip().split('\n') if f]
+        except GitCommandError as e:
+            logger.warning(f"Failed to get changed files against {base_branch}: {e}")
+            return []
+
+    def rollback_to_commit(self, commit_hash: str) -> None:
+        """Rollback to a specific commit (hard reset).
+        
+        Args:
+            commit_hash: The commit hash to reset to.
+            
+        Raises:
+            GitError: If reset fails
+        """
+        try:
+            logger.info(f"Rolling back to commit: {commit_hash}")
+            self.repo.git.reset('--hard', commit_hash)
+            logger.info(f"Successfully rolled back to {commit_hash}")
+        except GitCommandError as e:
+            raise GitError(f"Failed to rollback to {commit_hash}: {e}")
+
+    def force_push(self, branch_name: str) -> None:
+        """Force push to remote.
+        
+        Args:
+            branch_name: Branch name to force push.
+            
+        Raises:
+            GitError: If force push fails
+        """
+        try:
+            logger.info(f"Performing force push to {branch_name}")
+            self.repo.git.push('origin', branch_name, '--force')
+            logger.info(f"Successfully force pushed to {branch_name}")
+        except GitCommandError as e:
+            raise GitError(f"Failed to force push to {branch_name}: {e}")
