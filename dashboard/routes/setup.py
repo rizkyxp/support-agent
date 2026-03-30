@@ -8,8 +8,10 @@ router = APIRouter()
 class ReadinessStatus(BaseModel):
     github_cli: bool
     github_cli_msg: str
+    github_user: str = ""
     gemini_cli: bool
     gemini_cli_msg: str
+    gemini_user: str = ""
     python_deps: bool
     python_deps_msg: str
     all_ready: bool
@@ -29,7 +31,13 @@ async def get_readiness_status():
         result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             status.github_cli = True
-            status.github_cli_msg = "Logged in to GitHub CLI."
+            
+            user_result = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True, timeout=5)
+            if user_result.returncode == 0 and user_result.stdout.strip():
+                status.github_user = user_result.stdout.strip()
+                status.github_cli_msg = f"Logged in to GitHub CLI as @{status.github_user}."
+            else:
+                status.github_cli_msg = "Logged in to GitHub CLI."
         else:
             status.github_cli_msg = "GitHub CLI not logged in or not found. Please run 'gh auth login'."
     except FileNotFoundError:
@@ -43,7 +51,23 @@ async def get_readiness_status():
         result = subprocess.run(["gemini", "--help"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             status.gemini_cli = True
-            status.gemini_cli_msg = "Gemini CLI is installed and responsive."
+            
+            import os, json
+            gemini_dir = os.path.expanduser("~/.gemini")
+            accounts_file = os.path.join(gemini_dir, "google_accounts.json")
+            if os.path.exists(accounts_file):
+                with open(accounts_file, "r") as f:
+                    try:
+                        data = json.load(f)
+                        if "active" in data and data["active"]:
+                            status.gemini_user = data["active"]
+                            status.gemini_cli_msg = f"Logged in to Gemini CLI as {status.gemini_user}."
+                        else:
+                            status.gemini_cli_msg = "Gemini CLI is installed but no active account detected."
+                    except json.JSONDecodeError:
+                        status.gemini_cli_msg = "Gemini CLI is installed."
+            else:
+                status.gemini_cli_msg = "Gemini CLI is installed but no configuration found."
         else:
             # Maybe the user didn't install the exact 'gemini' binary or it's giving an error
             status.gemini_cli_msg = "Gemini CLI returned an error. Ensure it is configured."
